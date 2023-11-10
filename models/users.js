@@ -32,7 +32,15 @@ module.exports = (sequelize) => {
     },
     derniereconnexion: {
       type: DataTypes.DATE
-    }
+    },
+    resetPasswordToken: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      resetPasswordExpires: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      }
   }, {
     // Options du modèle
     sequelize, // instance de connexion

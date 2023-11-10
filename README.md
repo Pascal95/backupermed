@@ -1,1 +1,3 @@
 # backupermed
+
+- npm install
