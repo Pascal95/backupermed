@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { User } = require('./models');
+const { User, FicheUser, FicheVehicule, FichePermis } = require('./models');
 const crypto = require('crypto');
 const { Op } = require('sequelize');
 
@@ -64,6 +64,8 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
     }
 });
 
+
+// Demande MDP oublié
 app.post('/api/users/forgot-password', async (req, res) => {
     const { email } = req.body;
     // Générer un token de réinitialisation
@@ -93,6 +95,7 @@ app.post('/api/users/forgot-password', async (req, res) => {
     }
   });
   
+// MDP oublié
   app.post('/api/users/reset-password', async (req, res) => {
     const { token, newPassword } = req.body;
     try {
@@ -127,7 +130,52 @@ app.post('/api/users/forgot-password', async (req, res) => {
       res.status(500).json({ error: error.message });
     }
   });
-  
+
+app.post('/api/users/ficheuser', async (req,res) => {
+  try {
+    const {nom, prenom, adresse, ville, codepostal, mailcontact, telephone, role, idCNX, signature} = req.body;
+    const newFiche = await FicheUser.create({
+      nom,
+      prenom, 
+      adresse, 
+      ville, 
+      codepostal, 
+      mailcontact, 
+      telephone, 
+      role, 
+      idCNX, 
+      signature
+    })
+    res.status(201).json({ message: "Fiche utilisateur crée avec succès", ficheId: newFiche.idFiche });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+}});
+
+app.post('/api/users/fichevehicule', async (req,res) => {
+  try {
+    const {Marque, Modele, Annee, numImmatriculation, numSerie, ficVehicule, idFiche} = req.body;
+
+    const newFicheVehicule = await FicheVehicule.create({
+      Marque, Modele, Annee, numImmatriculation, numSerie, ficVehicule, idFiche
+    })
+    res.status(201).json({ message: "Fiche vehicule crée avec succès", ficheVehiculeId: newFicheVehicule.idVehicule });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+})
+
+app.post('/api/users/fichepermis', async (req,res) =>{
+  try {
+    const {numPermis, dateDel, dateExpi, ficPermis, idFiche} = req.body;
+
+    const newFichePermis = await FichePermis.create({
+      numPermis, dateDel, dateExpi, ficPermis, idFiche
+    })
+    res.status(201).json({ message: "Fiche permis crée avec succès", fichePermisId: newFichePermis.idVehicule });
+  } catch (error){
+    res.status(400).json({ error: error.message });
+  }
+})
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
