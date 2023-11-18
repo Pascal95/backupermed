@@ -56,3 +56,14 @@
     "ficPermis":"", 
     "idFiche":1
 }
+
+<h5>/api/users/profile</h5>
+<p>Endpoint pour recuperer les information d'un utilisateur</p>
+<b>Méthode</b> : GET
+<b>Exemple</b> :
+{
+    method: 'GET',
+    headers: {
+        'Authorization': `Bearer token`
+    }
+}

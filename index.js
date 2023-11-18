@@ -33,8 +33,10 @@ app.post('/api/users/login', async (req, res) => {
         if (!user || !(await bcrypt.compare(password, user.password))) {
             return res.status(401).json({ message: "Invalid credentials" });
         }
-        const token = jwt.sign({ userId: user.id }, 'secretKey', { expiresIn: '1h' });
+        
         await user.update({ derniereconnexion: new Date() });
+        const fiche = await FicheUser.findOne({where: {idCNX: user.id}})
+        const token = jwt.sign({ idFiche: fiche.idFiche }, 'secretKey', { expiresIn: '1h' });
         res.json({ token });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -57,8 +59,17 @@ function authenticateToken(req, res, next) {
 // Endpoint pour récupérer le profil utilisateur
 app.get('/api/users/profile', authenticateToken, async (req, res) => {
     try {
-        const user = await User.findByPk(req.user.userId);
-        res.json({ email: user.email, dateCreation: user.datecreation, derniereConnexion: user.derniereconnexion });
+        const user = await FicheUser.findByPk(req.user.idFiche);
+        res.json({ 
+          nom: user.nom, 
+          prenom: user.prenom, 
+          adresse: user.adresse, 
+          ville: user.ville, 
+          codepostal: user.codepostal,
+          mailcontact: user.mailcontact,
+          telephone: user.telephone,
+          role: user.role
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -151,6 +162,7 @@ app.post('/api/users/ficheuser', async (req,res) => {
     res.status(400).json({ error: error.message });
 }});
 
+
 app.post('/api/users/fichevehicule', async (req,res) => {
   try {
     const {Marque, Modele, Annee, numImmatriculation, numSerie, ficVehicule, idFiche} = req.body;
@@ -167,7 +179,6 @@ app.post('/api/users/fichevehicule', async (req,res) => {
 app.post('/api/users/fichepermis', async (req,res) =>{
   try {
     const {numPermis, dateDel, dateExpi, ficPermis, idFiche} = req.body;
-
     const newFichePermis = await FichePermis.create({
       numPermis, dateDel, dateExpi, ficPermis, idFiche
     })
