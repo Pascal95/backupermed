@@ -6,7 +6,7 @@
 <b>URL : </b>https://backupper.onrender.com
 <h5>/api/users/register</h5>
 <p>Endpoint pour l'inscription a la table connexion</p>
-<b>Méthode :</b> : POST
+<b>Méthode :</b> : POST<br>
 <b>Exemple :</b> : 
 {
     "email":"azeerr@hotmail.fr",
@@ -15,7 +15,7 @@
 
 <h5>/api/users/ficheuser</h5>
 <p>Endpoint pour l'inscription a la table ficheuser (detail sur l'utilisateur)</p>
-<b>Méthode :</b> : POST
+<b>Méthode :</b> : POST<br>
 <b>Exemple :</b> : 
 {
     "nom":"Pascal", 
@@ -32,7 +32,7 @@
 
 <h5>/api/users/fichevehicule</h5>
 <p>Endpoint pour la table fiche vehicule (si c'est un taxi)</p>
-<b>Méthode</b> : POST
+<b>Méthode</b> : POST<br>
 <b>Exemple</b> :
 {
     "Marque":"Peugeot", 
@@ -47,7 +47,7 @@
 
 <h5>/api/users/fichepermis</h5>
 <p>Endpoint pour la table fiche permis (si c'est un taxi)</p>
-<b>Méthode</b> : POST
+<b>Méthode</b> : POST<br>
 <b>Exemple</b> :
 {
     "numPermis":"768493", 
@@ -59,7 +59,7 @@
 
 <h5>/api/users/profile</h5>
 <p>Endpoint pour recuperer les information d'un utilisateur</p>
-<b>Méthode</b> : GET
+<b>Méthode</b> : GET<br>
 <b>Exemple</b> :
 {
     method: 'GET',

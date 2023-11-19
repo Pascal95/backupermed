@@ -43,9 +43,17 @@ module.exports = (sequelize) => {
         },
         idCNX:{
             type: DataTypes.INTEGER,
-            allowNull: false
+            allowNull: true
         },
         signature:{
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+        idFicheMere:{
+            type: DataTypes.INTEGER,
+            allowNull: true
+        },
+        numSS:{
             type: DataTypes.STRING,
             allowNull: true
         }

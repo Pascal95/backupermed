@@ -3,6 +3,7 @@ const setupUserModel = require('./users');
 const setupFicheUserModel = require ('./ficheuser')
 const setupFicheVehiculeModel = require ('./fichevehicule')
 const setupFichePermisModel = require ('./fichepermis')
+const setupReservation = require ('./reservation')
 
 
 // Créez une nouvelle instance de Sequelize pour se connecter à votre base de données
@@ -16,6 +17,7 @@ const User = setupUserModel(sequelize);
 const FicheUser = setupFicheUserModel(sequelize);
 const FicheVehicule = setupFicheVehiculeModel(sequelize);
 const FichePermis = setupFichePermisModel(sequelize);
+const Reservation = setupReservation(sequelize)
 
 // Synchronisez tous les modèles avec la base de données
 sequelize.sync();
@@ -25,5 +27,6 @@ module.exports = {
   User,
   FicheUser,
   FicheVehicule,
-  FichePermis
+  FichePermis,
+  Reservation
 };
