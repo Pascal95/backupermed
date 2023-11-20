@@ -13,6 +13,17 @@
     "password":"Axeb+3495"
 }
 
+<h5>/api/users/login</h5>
+<p>Endpoint pour se connecter a la table connexion</p>
+<b>Méthode :</b> : POST<br>
+<b>Exemple :</b> : 
+{
+    "email":"azeerr@hotmail.fr",
+    "password":"Axeb+3495"
+}
+
+<p>Le retour est un token que tu dois stocker</p>
+
 <h5>/api/users/ficheuser</h5>
 <p>Endpoint pour l'inscription a la table ficheuser (detail sur l'utilisateur)</p>
 <b>Méthode :</b> : POST<br>

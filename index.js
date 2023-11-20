@@ -144,7 +144,7 @@ app.post('/api/users/forgot-password', async (req, res) => {
 
 app.post('/api/users/ficheuser', async (req,res) => {
   try {
-    const {nom, prenom, adresse, ville, codepostal, mailcontact, telephone, role, idCNX, signature} = req.body;
+    const {nom, prenom, adresse, ville, codepostal, mailcontact, telephone, role, idCNX, signature, idFicheMere, numSS} = req.body;
     const newFiche = await FicheUser.create({
       nom,
       prenom, 
@@ -155,7 +155,9 @@ app.post('/api/users/ficheuser', async (req,res) => {
       telephone, 
       role, 
       idCNX, 
-      signature
+      signature,
+      idFicheMere,
+      numSS
     })
     res.status(201).json({ message: "Fiche utilisateur crée avec succès", ficheId: newFiche.idFiche });
   } catch (error) {
@@ -186,6 +188,10 @@ app.post('/api/users/fichepermis', async (req,res) =>{
   } catch (error){
     res.status(400).json({ error: error.message });
   }
+})
+
+app.post('/api/reservation/newreservation', authenticateToken, async (req,res) => {
+  
 })
 
 const PORT = process.env.PORT || 3000;
