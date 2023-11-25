@@ -1,9 +1,11 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { User, FicheUser, FicheVehicule, FichePermis } = require('./models');
+const { User, FicheUser, FicheVehicule, FichePermis, Reservation, BonTransport} = require('./models');
 const crypto = require('crypto');
 const { Op } = require('sequelize');
+const multer = require('multer');
+const upload = multer({ dest: 'uploads/' });
 
 const app = express();
 
@@ -191,8 +193,86 @@ app.post('/api/users/fichepermis', async (req,res) =>{
 })
 
 app.post('/api/reservation/newreservation', authenticateToken, async (req,res) => {
-  
+  try{
+    const {idClient, idTaxi, AdresseDepart, AdresseArrive, Distance, DureeTrajet, HeureConsult, HeureDepart, AllerRetour, DureeConsult} = req.body
+    //INSERT INTO `Reservation` (`idReservation`, `idClient`, `idTaxi`, `AdresseDepart`, `AdresseArrive`, `Distance`, `DureeTrajet`, `HeureConsult`, `HeureDepart`, `AllerRetour`, `DureeConsult`) VALUES (NULL, '1', '7', '6 rue des fossettes 95330 Domont', 'Hopital Eaubonne', '54,6', '00:30:00', '2023-11-21 17:30:00', '2023-11-20 
+    const newReservation = await Reservation.create({
+      idClient, 
+      idTaxi, 
+      AdresseDepart, 
+      AdresseArrive, 
+      Distance, 
+      DureeTrajet, 
+      HeureConsult, 
+      HeureDepart, 
+      AllerRetour, 
+      DureeConsult
+    })
+    res.status(201).json({ message: "Reservation crée avec succès", idReservation: newReservation.idReservation });
+  } catch (error){
+    res.status(400).json({ error: error.message });
+  }
 })
+
+app.get('/api/reservation/resafortaxi', authenticateToken, async (req,res) => {
+  try{
+    const user = await FicheUser.findByPk(req.user.idFiche);
+    const maintenant = new Date()
+    const reservations = await Reservation.findAll({
+      where:{
+        idTaxi:user.idFiche,
+        HeureConsult: {
+          [Op.gt]:maintenant
+        }
+      }
+    })
+    res.status(201).json({reservations});
+  } catch(error){
+    res.status(400).json({ error: error.message });
+  }
+})
+
+app.get('/api/reservation/resaforclient', authenticateToken, async (req,res) =>{
+  try{
+    const user = await FicheUser.findByPk(req.user.idFiche);
+    const maintenant = new Date()
+    const reservations = await Reservation.findAll({
+      where:{
+        idClient:user.idFiche,
+        HeureConsult: {
+          [Op.gt]:maintenant
+        }
+      }
+    })
+    res.status(201).json({reservations});
+  } catch(error){
+    res.status(400).json({ error: error.message });
+  }
+})
+
+app.post('/api/bon/bonfromcli',upload.single('pdf'), async (req,res) => {
+  try{
+    const file = req.file;
+    const filePath = file.path + ".pdf";
+    const {dateEmission, drPrescripteur, idFichePatient} = req.body
+
+    const bon = await BonTransport.create(
+      { 
+        idFichePatient
+        ,drPrescripteur
+        ,dateEmission
+      })
+    const addBon = await BonTransport.update({
+      ficBon: filePath
+    }, {
+      idBon: bon.idBon
+    })
+    res.status(201).json({ message: "Bon déposé avec succès", idBon: addBon.idBon });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+})
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
