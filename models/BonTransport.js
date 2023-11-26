@@ -9,6 +9,10 @@ module.exports = (sequelize) => {
         autoIncrement: true,
         allowNull: false
     },
+    idFichePatient: {
+        type: DataTypes.INTEGER,
+        allowNull: true
+    },
     drPrescripteur: {
         type: DataTypes.STRING,
         allowNull: true

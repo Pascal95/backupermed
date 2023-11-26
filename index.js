@@ -5,11 +5,63 @@ const { User, FicheUser, FicheVehicule, FichePermis, Reservation, BonTransport} 
 const crypto = require('crypto');
 const { Op } = require('sequelize');
 const multer = require('multer');
-const upload = multer({ dest: 'uploads/' });
+const path = require('path');
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/'); // Le chemin où les fichiers seront sauvegardés
+  },
+  filename: function (req, file, cb) {
+    // Conserver l'extension d'origine du fichier
+    cb(null, file.fieldname + '-' + Date.now() + path.extname(file.originalname));
+  }
+});
+
+//CONSTANTE
+const __ROLE_SUPERVISEUR__ = 1
+const __ROLE_TAXI__ = 3
+const __ROLE_MEDECIN__ = 4
+const __ROLE_UTILISATEUR__ = 5
+const __ROLE_SANSCOMPTE__ = 6 
+
+
+const upload = multer({ storage: storage });
 
 const app = express();
 
 app.use(express.json());
+
+// Middleware pour authentifier le token
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (token == null) return res.sendStatus(401);
+
+  jwt.verify(token, 'secretKey', (err, user) => {
+      if (err) return res.sendStatus(403);
+      req.user = user;
+      next();
+  });
+}
+
+
+// Endpoint pour la connexion
+app.post('/api/users/login', async (req, res) => {
+  try {
+      const { email, password } = req.body;
+      const user = await User.findOne({ where: { email } });
+      if (!user || !(await bcrypt.compare(password, user.password))) {
+          return res.status(401).json({ message: "Invalid credentials" });
+      }
+      
+      await user.update({ derniereconnexion: new Date() });
+      const fiche = await FicheUser.findOne({where: {idCNX: user.id}})
+      const token = jwt.sign({ idFiche: fiche.idFiche }, 'secretKey', { expiresIn: '1h' });
+      res.json({ token });
+  } catch (error) {
+      res.status(500).json({ error: error.message });
+  }
+});
 
 // Endpoint pour l'inscription
 app.post('/api/users/register', async (req, res) => {
@@ -27,38 +79,58 @@ app.post('/api/users/register', async (req, res) => {
     }
 });
 
-// Endpoint pour la connexion
-app.post('/api/users/login', async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        const user = await User.findOne({ where: { email } });
-        if (!user || !(await bcrypt.compare(password, user.password))) {
-            return res.status(401).json({ message: "Invalid credentials" });
-        }
-        
-        await user.update({ derniereconnexion: new Date() });
-        const fiche = await FicheUser.findOne({where: {idCNX: user.id}})
-        const token = jwt.sign({ idFiche: fiche.idFiche }, 'secretKey', { expiresIn: '1h' });
-        res.json({ token });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
+app.post('/api/users/ficheuser', async (req,res) => {
+  try {
+    const {nom, prenom, adresse, ville, codepostal, mailcontact, telephone, role, idCNX, signature, idFicheMere, numSS} = req.body;
+    const newFiche = await FicheUser.create({
+      nom,
+      prenom, 
+      adresse, 
+      ville, 
+      codepostal, 
+      mailcontact, 
+      telephone, 
+      role, 
+      idCNX, 
+      signature,
+      idFicheMere,
+      numSS,
+      TransportDispo:0
+    })
+    res.status(201).json({ message: "Fiche utilisateur crée avec succès", ficheId: newFiche.idFiche });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+}});
 
-// Middleware pour authentifier le token
-function authenticateToken(req, res, next) {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (token == null) return res.sendStatus(401);
 
-    jwt.verify(token, 'secretKey', (err, user) => {
-        if (err) return res.sendStatus(403);
-        req.user = user;
-        next();
-    });
-}
+app.post('/api/users/fichevehicule', async (req,res) => {
+  try {
+    const {Marque, Modele, Annee, numImmatriculation, numSerie, ficVehicule, idFiche} = req.body;
 
-// Endpoint pour récupérer le profil utilisateur
+    const newFicheVehicule = await FicheVehicule.create({
+      Marque, Modele, Annee, numImmatriculation, numSerie, ficVehicule, idFiche
+    })
+    res.status(201).json({ message: "Fiche vehicule crée avec succès", ficheVehiculeId: newFicheVehicule.idVehicule });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+})
+
+app.post('/api/users/fichepermis', async (req,res) =>{
+  try {
+    const {numPermis, dateDel, dateExpi, ficPermis, idFiche} = req.body;
+    const newFichePermis = await FichePermis.create({
+      numPermis, dateDel, dateExpi, ficPermis, idFiche
+    })
+    res.status(201).json({ message: "Fiche permis crée avec succès", fichePermisId: newFichePermis.idVehicule });
+  } catch (error){
+    res.status(400).json({ error: error.message });
+  }
+})
+
+
+
+// Endpoint pour récupérer profil utilisateur
 app.get('/api/users/profile', authenticateToken, async (req, res) => {
     try {
         const user = await FicheUser.findByPk(req.user.idFiche);
@@ -76,6 +148,20 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+app.get('/api/users/mesusers', authenticateToken,async (req,res) =>{
+  try{
+    const listeUser = await FicheUser.findAll({
+      where:{
+        idFicheMere:req.user.idFiche
+      }
+    })
+    res.status(201).json({listeUser});
+  }catch (error){
+    res.status(500).json({ error: error.message });
+  }
+
+})
 
 
 // Demande MDP oublié
@@ -144,54 +230,8 @@ app.post('/api/users/forgot-password', async (req, res) => {
     }
   });
 
-app.post('/api/users/ficheuser', async (req,res) => {
-  try {
-    const {nom, prenom, adresse, ville, codepostal, mailcontact, telephone, role, idCNX, signature, idFicheMere, numSS} = req.body;
-    const newFiche = await FicheUser.create({
-      nom,
-      prenom, 
-      adresse, 
-      ville, 
-      codepostal, 
-      mailcontact, 
-      telephone, 
-      role, 
-      idCNX, 
-      signature,
-      idFicheMere,
-      numSS
-    })
-    res.status(201).json({ message: "Fiche utilisateur crée avec succès", ficheId: newFiche.idFiche });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-}});
 
-
-app.post('/api/users/fichevehicule', async (req,res) => {
-  try {
-    const {Marque, Modele, Annee, numImmatriculation, numSerie, ficVehicule, idFiche} = req.body;
-
-    const newFicheVehicule = await FicheVehicule.create({
-      Marque, Modele, Annee, numImmatriculation, numSerie, ficVehicule, idFiche
-    })
-    res.status(201).json({ message: "Fiche vehicule crée avec succès", ficheVehiculeId: newFicheVehicule.idVehicule });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-})
-
-app.post('/api/users/fichepermis', async (req,res) =>{
-  try {
-    const {numPermis, dateDel, dateExpi, ficPermis, idFiche} = req.body;
-    const newFichePermis = await FichePermis.create({
-      numPermis, dateDel, dateExpi, ficPermis, idFiche
-    })
-    res.status(201).json({ message: "Fiche permis crée avec succès", fichePermisId: newFichePermis.idVehicule });
-  } catch (error){
-    res.status(400).json({ error: error.message });
-  }
-})
-
+// Endpoint pour creer une reservation
 app.post('/api/reservation/newreservation', authenticateToken, async (req,res) => {
   try{
     const {idClient, idTaxi, AdresseDepart, AdresseArrive, Distance, DureeTrajet, HeureConsult, HeureDepart, AllerRetour, DureeConsult} = req.body
@@ -214,64 +254,119 @@ app.post('/api/reservation/newreservation', authenticateToken, async (req,res) =
   }
 })
 
+// Endpoint pour voir les reservations
 app.get('/api/reservation/resafortaxi', authenticateToken, async (req,res) => {
-  try{
-    const user = await FicheUser.findByPk(req.user.idFiche);
-    const maintenant = new Date()
-    const reservations = await Reservation.findAll({
-      where:{
-        idTaxi:user.idFiche,
-        HeureConsult: {
-          [Op.gt]:maintenant
+  if (req.user.role == __ROLE_TAXI__) {
+    try{
+      const user = await FicheUser.findByPk(req.user.idFiche);
+      const maintenant = new Date()
+      const reservations = await Reservation.findAll({
+        where:{
+          idTaxi:user.idFiche,
+          HeureConsult: {
+            [Op.gt]:maintenant
+          }
         }
-      }
-    })
-    res.status(201).json({reservations});
-  } catch(error){
-    res.status(400).json({ error: error.message });
+      })
+      res.status(201).json({reservations});
+    } catch(error){
+      res.status(400).json({ error: error.message });
+    }
+  } else{
+    res.status(400).json({ error: "L'utilisateur n'a pas les droits necessaire" });
   }
+
 })
 
 app.get('/api/reservation/resaforclient', authenticateToken, async (req,res) =>{
-  try{
-    const user = await FicheUser.findByPk(req.user.idFiche);
-    const maintenant = new Date()
-    const reservations = await Reservation.findAll({
-      where:{
-        idClient:user.idFiche,
-        HeureConsult: {
-          [Op.gt]:maintenant
+  if (req.user.role == __ROLE_UTILISATEUR__) {
+    try{
+      const user = await FicheUser.findByPk(req.user.idFiche);
+      const maintenant = new Date()
+      const reservations = await Reservation.findAll({
+        where:{
+          idClient:user.idFiche,
+          HeureConsult: {
+            [Op.gt]:maintenant
+          }
         }
-      }
-    })
-    res.status(201).json({reservations});
-  } catch(error){
-    res.status(400).json({ error: error.message });
+      })
+      res.status(201).json({reservations});
+    } catch(error){
+      res.status(400).json({ error: error.message });
+    }
+  } else {
+    res.status(400).json({ error: "L'utilisateur n'a pas les droits necessaire" });
   }
+
 })
 
-app.post('/api/bon/bonfromcli',upload.single('pdf'), async (req,res) => {
+//Endpoint pour deposer des bons de transport
+app.post('/api/bon/bonfromcli',authenticateToken ,upload.single('pdf'), async (req,res) => {
+  if(req.user.role == __ROLE_UTILISATEUR__){
+    try{
+      const file = req.file;
+      const filePath = file.path + ".pdf";
+      const {dateEmission, drPrescripteur} = req.body
+      const idFichePatient = req.user.idFiche
+      const bon = await BonTransport.create(
+        { 
+          idFichePatient:idFichePatient
+          ,drPrescripteur:drPrescripteur
+          ,dateEmission:dateEmission
+          ,ficBon:filePath
+        })
+      res.status(201).json({ message: "Bon déposé avec succès", idBon: bon.idBon });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  }else {
+    res.status(400).json({ error: "L'utilisateur n'a pas les droits necessaire" });
+  }
+
+})
+
+app.post('/api/bon/bonfrommedecin', authenticateToken, upload.single('pdf'), async (req, res) => {
+if(req.user.role == __ROLE_MEDECIN__){
   try{
     const file = req.file;
     const filePath = file.path + ".pdf";
     const {dateEmission, drPrescripteur, idFichePatient} = req.body
-
     const bon = await BonTransport.create(
       { 
-        idFichePatient
-        ,drPrescripteur
-        ,dateEmission
+        idFichePatient:idFichePatient
+        ,drPrescripteur:drPrescripteur
+        ,dateEmission:dateEmission
+        ,ficBon:filePath
       })
-    const addBon = await BonTransport.update({
-      ficBon: filePath
-    }, {
-      idBon: bon.idBon
-    })
-    res.status(201).json({ message: "Bon déposé avec succès", idBon: addBon.idBon });
+    res.status(201).json({ message: "Bon déposé avec succès", idBon: bon.idBon });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
+}else {
+  res.status(400).json({ error: "L'utilisateur n'a pas les droits necessaire" });
+}
 })
+
+
+app.post('/api/users/addTransport', authenticateToken, async (req,res) =>{
+  try{
+    const {idFiche, transport} = req.body;
+    const Fiche = await FicheUser.increment(
+      {TransportDispo:transport},
+      {where:{
+        idFiche:idFiche
+      }})
+    res.status(201).json({ message: "Nombre de transport correctement ajouté"});
+  }catch(error){
+    res.status(400).json({ error: error.message });
+  }
+    
+
+})
+
+
+
 
 
 const PORT = process.env.PORT || 3000;

@@ -56,6 +56,10 @@ module.exports = (sequelize) => {
         numSS:{
             type: DataTypes.STRING,
             allowNull: true
+        },
+        TransportDispo:{
+            type: DataTypes.INTEGER,
+            allowNull:true
         }
     }, {
     // Options du modèle
