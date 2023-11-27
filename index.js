@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const { Op } = require('sequelize');
 const multer = require('multer');
 const path = require('path');
+const nodemailer = require('nodemailer');
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -45,6 +46,41 @@ function authenticateToken(req, res, next) {
 }
 
 
+//Fonction
+
+//Envoie email
+async function sendEmail(recipient, subject, text) {
+  let transporter = nodemailer.createTransport({
+      host: 'smtp-mail.outlook.com', // Remplacez par l'adresse de votre serveur SMTP
+      port: 587,
+      secure: false, // true pour 465, false pour les autres ports
+      auth: {
+          user: 'richardshht@hotmail.fr', // votre adresse email
+          pass: '3D2bd6f8' // votre mot de passe email
+      }
+  });
+
+  let info = await transporter.sendMail({
+      from: '"UperMed" <richardshht@hotmail.fr>', // adresse d'envoi
+      to: recipient, // liste des destinataires
+      subject: subject, // Sujet
+      text: text, // corps du mail en texte brut
+      // html: "<b>Hello world?</b>" // corps du mail en HTML (optionnel)
+  });
+
+}
+
+const pad = (number) => (number < 10 ? '0' + number : number);
+const formatDate = (date) => {
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hour = pad(date.getHours());
+  const minute = pad(date.getMinutes());
+  const second = pad(date.getSeconds());
+
+  return `${year}${month}${day}${hour}${minute}${second}`;
+};
 // Endpoint pour la connexion
 app.post('/api/users/login', async (req, res) => {
   try {
@@ -73,6 +109,10 @@ app.post('/api/users/register', async (req, res) => {
             password: hashedPassword,
             datecreation: new Date(),
         });
+        const dateTime = formatDate(new Date());
+        const link = "localhost:3000/signinvd/?info=" + dateTime + newUser.id
+        const message = "Bonjour, vous etes en train de vous inscrire sur le site UperMed pour continuer l'inscription veuillez suivre le lien suivant : " + link
+        sendEmail(email,"Inscription", message)
         res.status(201).json({ message: "User created successfully", userId: newUser.id });
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -350,18 +390,21 @@ if(req.user.role == __ROLE_MEDECIN__){
 
 
 app.post('/api/users/addTransport', authenticateToken, async (req,res) =>{
-  try{
-    const {idFiche, transport} = req.body;
-    const Fiche = await FicheUser.increment(
-      {TransportDispo:transport},
-      {where:{
-        idFiche:idFiche
-      }})
-    res.status(201).json({ message: "Nombre de transport correctement ajouté"});
-  }catch(error){
-    res.status(400).json({ error: error.message });
+  if(req.user.role == __ROLE_SUPERVISEUR__){
+    try{
+      const {idFiche, transport} = req.body;
+      const Fiche = await FicheUser.increment(
+        {TransportDispo:transport},
+        {where:{
+          idFiche:idFiche
+        }})
+      res.status(201).json({ message: "Nombre de transport correctement ajouté"});
+    }catch(error){
+      res.status(400).json({ error: error.message });
+    }
+  } else{
+    res.status(400).json({ error: "Vous ne possédez pas les droits necessaire" });
   }
-    
 
 })
 
