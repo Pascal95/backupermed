@@ -7,6 +7,7 @@ const { Op } = require('sequelize');
 const multer = require('multer');
 const path = require('path');
 const nodemailer = require('nodemailer');
+const cors = require('cors');
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -29,7 +30,7 @@ const __ROLE_SANSCOMPTE__ = 6
 const upload = multer({ storage: storage });
 
 const app = express();
-
+app.use(cors());
 app.use(express.json());
 
 // Middleware pour authentifier le token
@@ -273,9 +274,10 @@ app.post('/api/users/forgot-password', async (req, res) => {
 
 // Endpoint pour creer une reservation
 app.post('/api/reservation/newreservation', authenticateToken, async (req,res) => {
+
   try{
     const {idClient, idTaxi, AdresseDepart, AdresseArrive, Distance, DureeTrajet, HeureConsult, HeureDepart, AllerRetour, DureeConsult} = req.body
-    //INSERT INTO `Reservation` (`idReservation`, `idClient`, `idTaxi`, `AdresseDepart`, `AdresseArrive`, `Distance`, `DureeTrajet`, `HeureConsult`, `HeureDepart`, `AllerRetour`, `DureeConsult`) VALUES (NULL, '1', '7', '6 rue des fossettes 95330 Domont', 'Hopital Eaubonne', '54,6', '00:30:00', '2023-11-21 17:30:00', '2023-11-20 
+
     const newReservation = await Reservation.create({
       idClient, 
       idTaxi, 
