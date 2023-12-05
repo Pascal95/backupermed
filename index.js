@@ -111,7 +111,7 @@ app.post('/api/users/register', async (req, res) => {
             datecreation: new Date(),
         });
         const dateTime = formatDate(new Date());
-        const link = "localhost:3000/signinvd/?info=" + dateTime + newUser.id
+        const link = "http://localhost:3000/InscriptionEtape/?info=" + dateTime + newUser.id
         const message = "Bonjour, vous etes en train de vous inscrire sur le site UperMed pour continuer l'inscription veuillez suivre le lien suivant : " + link
         sendEmail(email,"Inscription", message)
         res.status(201).json({ message: "User created successfully", userId: newUser.id });
