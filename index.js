@@ -52,17 +52,15 @@ function authenticateToken(req, res, next) {
 //Envoie email
 async function sendEmail(recipient, subject, text) {
   let transporter = nodemailer.createTransport({
-      host: 'smtp-mail.outlook.com', // Remplacez par l'adresse de votre serveur SMTP
-      port: 587,
-      secure: false, // true pour 465, false pour les autres ports
-      auth: {
-          user: 'richardshht@hotmail.fr', // votre adresse email
-          pass: '3D2bd6f8' // votre mot de passe email
-      }
-  });
+    service: 'gmail',
+    auth: {
+        user: 'richard.pascalpro@gmail.com',
+        pass: 'shzw rrnb dcmj mgkl' // ou votre mot de passe d'application si l'authentification à deux facteurs est activée
+    }
+});
   try {
     let info = await transporter.sendMail({
-      from: '"UperMed" <richardshht@hotmail.fr>', // adresse d'envoi
+      from: '"UperMed" <richard.pascalpro@gmail.com', // adresse d'envoi
       to: recipient, // liste des destinataires
       subject: subject, // Sujet
       text: text, // corps du mail en texte brut
