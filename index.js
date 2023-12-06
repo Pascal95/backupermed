@@ -60,14 +60,19 @@ async function sendEmail(recipient, subject, text) {
           pass: '3D2bd6f8' // votre mot de passe email
       }
   });
-
-  let info = await transporter.sendMail({
+  try {
+    let info = await transporter.sendMail({
       from: '"UperMed" <richardshht@hotmail.fr>', // adresse d'envoi
       to: recipient, // liste des destinataires
       subject: subject, // Sujet
       text: text, // corps du mail en texte brut
       // html: "<b>Hello world?</b>" // corps du mail en HTML (optionnel)
   });
+
+  } catch (error) {
+    console.error("Erreur lors de l'envoi de l'email: ", error);
+        throw error;
+  }
 
 }
 
@@ -113,7 +118,7 @@ app.post('/api/users/register', async (req, res) => {
         const dateTime = formatDate(new Date());
         const link = "http://localhost:3000/InscriptionEtape/?info=" + dateTime + newUser.id
         const message = "Bonjour, vous etes en train de vous inscrire sur le site UperMed pour continuer l'inscription veuillez suivre le lien suivant : " + link
-        sendEmail(email,"Inscription", message)
+        await sendEmail(email,"Inscription", message)
         res.status(201).json({ message: "User created successfully", userId: newUser.id });
     } catch (error) {
         res.status(400).json({ error: error.message });
