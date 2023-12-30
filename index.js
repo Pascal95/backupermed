@@ -8,6 +8,7 @@ const multer = require('multer');
 const path = require('path');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
+const { sequelize } = require('./models');
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -279,8 +280,40 @@ app.post('/api/users/forgot-password', async (req, res) => {
 app.post('/api/reservation/newreservation', authenticateToken, async (req,res) => {
 
   try{
-    const {idClient, idTaxi, AdresseDepart, AdresseArrive, Distance, DureeTrajet, HeureConsult, HeureDepart, AllerRetour, DureeConsult} = req.body
+    const {idClient, AdresseDepart, AdresseArrive, Distance, DureeTrajet, HeureConsult, HeureDepart, AllerRetour, DureeConsult} = req.body
 
+    // Convertir HeureConsult en objet Date
+    const dateHeureConsult = new Date(HeureConsult);
+
+    // Formater la date pour correspondre à votre format SQL (YYYY-MM-DD)
+    const dateConsultation = dateHeureConsult.toISOString().split('T')[0];
+
+    const [resultats] = await sequelize.query(`
+    SELECT 
+    U.idFiche AS idTaxi,
+    COALESCE(SUM(CASE 
+                WHEN R.allerretour = 1 THEN R.distance * 2 
+                 ELSE R.distance 
+              END), 0) AS distanceTotale
+    FROM 
+      USR_Fiche U
+    LEFT JOIN 
+      Reservation R ON U.idFiche = R.idTaxi
+    WHERE 
+      U.role = 3
+      AND (R.HeureConsult IS NULL OR DATE(R.HeureConsult) = '${dateConsultation}')
+    GROUP BY 
+      U.idFiche
+    ORDER BY 
+      distanceTotale ASC
+    LIMIT 1;
+    `);
+
+    if (resultats.length === 0) {
+      return res.status(404).json({ message: "Aucun taxi disponible trouvé" });
+    }
+
+    const idTaxi = resultats[0].idTaxi;
     const newReservation = await Reservation.create({
       idClient, 
       idTaxi, 
