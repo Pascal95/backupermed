@@ -280,8 +280,8 @@ app.post('/api/users/forgot-password', async (req, res) => {
 app.post('/api/reservation/newreservation', authenticateToken, async (req,res) => {
 
   try{
-    const {idClient, AdresseDepart, AdresseArrive, Distance, DureeTrajet, HeureConsult, HeureDepart, AllerRetour, DureeConsult} = req.body
-
+    const {AdresseDepart, AdresseArrive, Distance, DureeTrajet, HeureConsult, HeureDepart, AllerRetour, DureeConsult} = req.body
+    const idClient = req.user.idFiche;
     // Convertir HeureConsult en objet Date
     const dateHeureConsult = new Date(HeureConsult);
 
