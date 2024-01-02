@@ -287,25 +287,25 @@ app.post('/api/reservation/newreservation', authenticateToken, async (req,res) =
 
     // Formater la date pour correspondre à votre format SQL (YYYY-MM-DD)
     const dateConsultation = dateHeureConsult.toISOString().split('T')[0];
-
+    
     const [resultats] = await sequelize.query(`
     SELECT 
     U.idFiche AS idTaxi,
     COALESCE(SUM(CASE 
                 WHEN R.allerretour = 1 THEN R.distance * 2 
-                 ELSE R.distance 
+                ELSE R.distance 
               END), 0) AS distanceTotale
     FROM 
-      USR_Fiche U
+        USR_Fiche U
     LEFT JOIN 
-      Reservation R ON U.idFiche = R.idTaxi
+        Reservation R ON U.idFiche = R.idTaxi AND DATE(R.HeureConsult) = '${dateConsultation}'
     WHERE 
-      U.role = 3
-      AND (R.HeureConsult IS NULL OR DATE(R.HeureConsult) = '${dateConsultation}')
+        U.role = 3
     GROUP BY 
-      U.idFiche
+        U.idFiche
     ORDER BY 
-      distanceTotale ASC
+        distanceTotale ASC, 
+        COUNT(R.idTaxi) ASC  -- Ajoutez un critère de tri pour les taxis avec moins de réservations
     LIMIT 1;
     `);
 
@@ -403,6 +403,8 @@ app.post('/api/bon/bonfromcli',authenticateToken ,upload.single('pdf'), async (r
   }
 
 })
+
+
 
 app.post('/api/bon/bonfrommedecin', authenticateToken, upload.single('pdf'), async (req, res) => {
 if(req.user.role == __ROLE_MEDECIN__){
