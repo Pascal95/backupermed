@@ -97,7 +97,7 @@ app.post('/api/users/login', async (req, res) => {
       
       await user.update({ derniereconnexion: new Date() });
       const fiche = await FicheUser.findOne({where: {idCNX: user.id}})
-      const token = jwt.sign({ idFiche: fiche.idFiche }, 'secretKey', { expiresIn: '1h' });
+      const token = jwt.sign({ idFiche: fiche.idFiche, role: fiche.role }, 'secretKey', { expiresIn: '1h' });
       res.json({ token });
   } catch (error) {
       res.status(500).json({ error: error.message });
@@ -237,43 +237,43 @@ app.post('/api/users/forgot-password', async (req, res) => {
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
-  });
+});
   
 // MDP oublié
-  app.post('/api/users/reset-password', async (req, res) => {
-    const { token, newPassword } = req.body;
-    try {
-      const user = await User.findOne({
-        where: {
-          resetPasswordToken: token,
-          resetPasswordExpires: {
-            [Op.gt]: Date.now() // Sequelize Op.gt pour vérifier que la date d'expiration est dans le futur
-          }
+app.post('/api/users/reset-password', async (req, res) => {
+  const { token, newPassword } = req.body;
+  try {
+    const user = await User.findOne({
+      where: {
+        resetPasswordToken: token,
+        resetPasswordExpires: {
+          [Op.gt]: Date.now() // Sequelize Op.gt pour vérifier que la date d'expiration est dans le futur
         }
-      });
-  
-      if (!user) {
-        return res.status(400).json({ message: "Password reset token is invalid or has expired." });
       }
-  
-      // Hash du nouveau mot de passe
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-  
-      // Mettre à jour le mot de passe de l'utilisateur
-      await user.update({
-        password: hashedPassword,
-        resetPasswordToken: null, // Effacez le token de réinitialisation
-        resetPasswordExpires: null // Effacez la date d'expiration du token
-      });
-  
-      // Envoyer une confirmation de la réinitialisation du mot de passe
-      // Ici, intégrez une bibliothèque d'envoi d'emails comme nodemailer pour envoyer l'email de confirmation
-  
-      res.json({ message: "Your password has been updated." });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Password reset token is invalid or has expired." });
     }
-  });
+
+    // Hash du nouveau mot de passe
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Mettre à jour le mot de passe de l'utilisateur
+    await user.update({
+      password: hashedPassword,
+      resetPasswordToken: null, // Effacez le token de réinitialisation
+      resetPasswordExpires: null // Effacez la date d'expiration du token
+    });
+
+    // Envoyer une confirmation de la réinitialisation du mot de passe
+    // Ici, intégrez une bibliothèque d'envoi d'emails comme nodemailer pour envoyer l'email de confirmation
+
+    res.json({ message: "Your password has been updated." });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 
 // Endpoint pour creer une reservation
@@ -448,7 +448,65 @@ app.post('/api/users/addTransport', authenticateToken, async (req,res) =>{
 
 })
 
+app.get('/api/reservation/nextresa', authenticateToken, async (req,res) =>{
+  console.log(req.user)
+  switch (req.user.role) {
+    case __ROLE_SUPERVISEUR__:
+      try{
+        const maintenant = new Date()
+        const reservations = await Reservation.findAll({
+          where:{
+            HeureConsult: {
+              [Op.gt]:maintenant
+            }
+          }
+        })
+        res.status(201).json({reservations});
+      } catch(error){
+        res.status(400).json({ error: error.message });
+      }
+      break;
 
+    case __ROLE_TAXI__:
+      try{
+        const maintenant = new Date()
+        const reservations = await Reservation.findAll({
+          where:{
+            idTaxi:req.user.idFiche,
+            HeureConsult: {
+              [Op.gt]:maintenant
+            }
+          }
+        })
+        res.status(201).json({reservations});
+      } catch(error){
+        res.status(400).json({ error: error.message });
+      }
+      break;
+
+      case __ROLE_UTILISATEUR__:
+        try{
+          const maintenant = new Date()
+          const reservations = await Reservation.findAll({
+            where:{
+              idClient:req.user.idFiche,
+              HeureConsult: {
+                [Op.gt]:maintenant
+              }
+            }
+          })
+          res.status(201).json({reservations});
+        } catch(error){
+          res.status(400).json({ error: error.message });
+        }
+        break;
+
+    default:
+      res.status(400).json({ error: "Vous ne possédez pas les droits necessaire" });
+      break;
+
+    }
+})
 
 
 
