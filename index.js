@@ -456,7 +456,7 @@ app.get('/api/reservation/nextresa', authenticateToken, async (req,res) =>{
         const maintenant = new Date()
         const reservations = await Reservation.findAll({
           where:{
-            HeureConsult: {
+            HeureDepart: {
               [Op.gt]:maintenant
             }
           }
@@ -473,7 +473,7 @@ app.get('/api/reservation/nextresa', authenticateToken, async (req,res) =>{
         const reservations = await Reservation.findAll({
           where:{
             idTaxi:req.user.idFiche,
-            HeureConsult: {
+            HeureDepart: {
               [Op.gt]:maintenant
             }
           }
@@ -490,7 +490,7 @@ app.get('/api/reservation/nextresa', authenticateToken, async (req,res) =>{
           const reservations = await Reservation.findAll({
             where:{
               idClient:req.user.idFiche,
-              HeureConsult: {
+              HeureDepart: {
                 [Op.gt]:maintenant
               }
             }
