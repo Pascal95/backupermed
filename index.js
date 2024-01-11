@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { User, FicheUser, FicheVehicule, FichePermis, Reservation, BonTransport} = require('./models');
+const { User, FicheUser, FicheVehicule, FichePermis, Reservation, BonTransport, Message} = require('./models');
 const crypto = require('crypto');
 const { Op } = require('sequelize');
 const multer = require('multer');
@@ -12,11 +12,24 @@ const { sequelize } = require('./models');
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'uploads/'); // Le chemin où les fichiers seront sauvegardés
+      let folder = "";
+      switch (file.fieldname) {
+          case 'permis':
+              folder = "uploads/permis";
+              break;
+          case 'carteGrise':
+              folder = "uploads/cartes_grises";
+              break;
+          case 'BonTransport':
+            folder = "uploads/BonTransport"
+          // ajoutez d'autres cas au besoin
+      }
+      cb(null, folder);
   },
   filename: function (req, file, cb) {
-    // Conserver l'extension d'origine du fichier
-    cb(null, file.fieldname + '-' + Date.now() + path.extname(file.originalname));
+      // Vous pouvez également personnaliser le nom du fichier ici
+      const fileExt = path.extname(file.originalname);
+      cb(null, file.fieldname + '-' + Date.now() + fileExt);
   }
 });
 
@@ -148,30 +161,47 @@ app.post('/api/users/ficheuser', async (req,res) => {
 }});
 
 
-app.post('/api/users/fichevehicule', async (req,res) => {
+
+app.post('/api/users/fichevehicule', upload.fields([{ name: 'carteGrise' }]), async (req, res) => {
   try {
-    const {Marque, Modele, Annee, numImmatriculation, numSerie, ficVehicule, idFiche} = req.body;
+    const { Marque, Modele, Annee, numImmatriculation, numSerie, idFiche } = req.body;
+
+    // Chemin du fichier téléchargé pour la carte grise
+    let cheminCarteGrise = "";
+    if (req.files['carteGrise']) {
+      cheminCarteGrise = req.files['carteGrise'][0].path;
+    }
 
     const newFicheVehicule = await FicheVehicule.create({
-      Marque, Modele, Annee, numImmatriculation, numSerie, ficVehicule, idFiche
-    })
+      Marque, Modele, Annee, numImmatriculation, numSerie, ficVehicule: cheminCarteGrise, idFiche
+    });
+
     res.status(201).json({ message: "Fiche vehicule crée avec succès", ficheVehiculeId: newFicheVehicule.idVehicule });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
-})
+});
 
-app.post('/api/users/fichepermis', async (req,res) =>{
+
+app.post('/api/users/fichepermis', upload.single('permis'), async (req, res) => {
   try {
-    const {numPermis, dateDel, dateExpi, ficPermis, idFiche} = req.body;
+    const { numPermis, dateDel, dateExpi, idFiche } = req.body;
+
+    // Chemin du fichier téléchargé pour le permis
+    let cheminFicPermis = "";
+    if (req.file['permis']) {
+      cheminFicPermis = req.files['permis'][0].path;
+    }
+
     const newFichePermis = await FichePermis.create({
-      numPermis, dateDel, dateExpi, ficPermis, idFiche
-    })
+      numPermis, dateDel, dateExpi, ficPermis: cheminFicPermis, idFiche
+    });
+
     res.status(201).json({ message: "Fiche permis crée avec succès", fichePermisId: newFichePermis.idVehicule });
-  } catch (error){
+  } catch (error) {
     res.status(400).json({ error: error.message });
   }
-})
+});
 
 
 
@@ -380,11 +410,13 @@ app.get('/api/reservation/resaforclient', authenticateToken, async (req,res) =>{
 })
 
 //Endpoint pour deposer des bons de transport
-app.post('/api/bon/bonfromcli',authenticateToken ,upload.single('pdf'), async (req,res) => {
+app.post('/api/bon/bonfromcli',authenticateToken ,upload.single('BonTransport'), async (req,res) => {
   if(req.user.role == __ROLE_UTILISATEUR__){
     try{
-      const file = req.file;
-      const filePath = file.path + ".pdf";
+      let cheminBon = "";
+      if (req.file['BonTransport']) {
+        cheminBon = req.files['BonTransport'][0].path;
+      }
       const {dateEmission, drPrescripteur} = req.body
       const idFichePatient = req.user.idFiche
       const bon = await BonTransport.create(
@@ -392,7 +424,7 @@ app.post('/api/bon/bonfromcli',authenticateToken ,upload.single('pdf'), async (r
           idFichePatient:idFichePatient
           ,drPrescripteur:drPrescripteur
           ,dateEmission:dateEmission
-          ,ficBon:filePath
+          ,ficBon:cheminBon
         })
       res.status(201).json({ message: "Bon déposé avec succès", idBon: bon.idBon });
     } catch (error) {
@@ -429,24 +461,68 @@ if(req.user.role == __ROLE_MEDECIN__){
 })
 
 
-app.post('/api/users/addTransport', authenticateToken, async (req,res) =>{
-  if(req.user.role == __ROLE_SUPERVISEUR__){
-    try{
-      const {idFiche, transport} = req.body;
-      const Fiche = await FicheUser.increment(
-        {TransportDispo:transport},
-        {where:{
-          idFiche:idFiche
-        }})
-      res.status(201).json({ message: "Nombre de transport correctement ajouté"});
-    }catch(error){
+app.post('/api/bon/validateBon', authenticateToken, async (req, res) => {
+  if (req.user.role === __ROLE_SUPERVISEUR__) {
+    try {
+      const { idFiche, idBonTransport } = req.body;
+
+      // Mise à jour de la colonne 'valide' dans BonTransport
+      await BonTransport.update(
+        { valide: true },
+        { where: { id: idBonTransport } }
+      );
+
+      // Incrémenter la colonne 'transport' dans FicheUser
+      await FicheUser.increment(
+        { TransportDispo: 1 },
+        { where: { idFiche: idFiche } }
+      );
+
+      await Message.create({
+        idFiche: idFiche,
+        Objet: 'Validation de Bon de Transport',
+        Message: 'Votre bon de transport a été validé avec succès.'
+      });
+
+      res.status(201).json({ message: "Bon de transport validé et nombre de transport mis à jour." });
+    } catch (error) {
       res.status(400).json({ error: error.message });
     }
-  } else{
-    res.status(400).json({ error: "Vous ne possédez pas les droits necessaire" });
+  } else {
+    res.status(403).json({ error: "Vous ne possédez pas les droits nécessaires" });
   }
+});
 
-})
+app.post('/api/bon/refuseBon', authenticateToken, async (req, res) => {
+  if (req.user.role === __ROLE_SUPERVISEUR__) {
+    try {
+      const { idBonTransport, idFiche, messageRefus } = req.body;
+
+      // Mise à jour de la colonne 'valide' dans BonTransport pour marquer comme refusé
+      await BonTransport.update(
+        { valide: false },
+        { where: { id: idBonTransport } }
+      );
+
+      // Optionnel: Ajouter un message dans la table 'Message' pour notifier l'utilisateur du refus
+      if (messageRefus) {
+        await Message.create({
+          idFiche: idFiche,
+          Objet: 'Refus de Bon de Transport',
+          Message: messageRefus
+        });
+      }
+
+      res.status(200).json({ message: "Bon de transport refusé avec succès." });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  } else {
+    res.status(403).json({ error: "Vous ne possédez pas les droits nécessaires" });
+  }
+});
+
+
 
 app.get('/api/reservation/nextresa', authenticateToken, async (req,res) =>{
   console.log(req.user)
