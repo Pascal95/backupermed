@@ -168,8 +168,8 @@ app.post('/api/users/fichevehicule', upload.fields([{ name: 'carteGrise' }]), as
 
     // Chemin du fichier téléchargé pour la carte grise
     let cheminCarteGrise = "";
-    if (req.files['carteGrise']) {
-      cheminCarteGrise = req.files['carteGrise'][0].path;
+    if (req.file['carteGrise']) {
+      cheminCarteGrise = req.file['carteGrise'][0].path;
     }
 
     const newFicheVehicule = await FicheVehicule.create({
@@ -185,23 +185,24 @@ app.post('/api/users/fichevehicule', upload.fields([{ name: 'carteGrise' }]), as
 
 app.post('/api/users/fichepermis', upload.single('permis'), async (req, res) => {
   try {
-    const { numPermis, dateDel, dateExpi, idFiche } = req.body;
+      const { numPermis, dateDel, dateExpi, idFiche } = req.body;
 
-    // Chemin du fichier téléchargé pour le permis
-    let cheminFicPermis = "";
-    if (req.file['permis']) {
-      cheminFicPermis = req.files['permis'][0].path;
-    }
+      // Chemin du fichier téléchargé pour le permis
+      let cheminFicPermis = "";
+      if (req.file) {  // Utilisez req.file au lieu de req.file['permis']
+          cheminFicPermis = req.file.path;  // Accédez directement à req.file.path
+      }
 
-    const newFichePermis = await FichePermis.create({
-      numPermis, dateDel, dateExpi, ficPermis: cheminFicPermis, idFiche
-    });
+      const newFichePermis = await FichePermis.create({
+          numPermis, dateDel, dateExpi, ficPermis: cheminFicPermis, idFiche
+      });
 
-    res.status(201).json({ message: "Fiche permis crée avec succès", fichePermisId: newFichePermis.idVehicule });
+      res.status(201).json({ message: "Fiche permis crée avec succès", fichePermisId: newFichePermis.idVehicule });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+      res.status(400).json({ error: error.message });
   }
 });
+
 
 
 
