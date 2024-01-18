@@ -68,5 +68,12 @@ module.exports = (sequelize) => {
     tableName: 'USR_Fiche', // nom de la table dans la base de données
     timestamps: false // désactive la gestion automatique des timestamps par Sequelize
     })
+    FicheUser.associate = (models) => {
+        FicheUser.hasMany(models.BonTransport, {
+          foreignKey: 'idFichePatient',
+          as: 'bonsTransport'
+        });
+      };
+      
   return FicheUser;
 };

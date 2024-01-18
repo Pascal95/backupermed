@@ -411,32 +411,29 @@ app.get('/api/reservation/resaforclient', authenticateToken, async (req,res) =>{
 })
 
 //Endpoint pour deposer des bons de transport
-app.post('/api/bon/bonfromcli',authenticateToken ,upload.single('BonTransport'), async (req,res) => {
+app.post('/api/bon/bonfromcli', authenticateToken, upload.single('BonTransport'), async (req, res) => {
   if(req.user.role == __ROLE_UTILISATEUR__){
     try{
       let cheminBon = "";
-      if (req.file['BonTransport']) {
-        cheminBon = req.files['BonTransport'][0].path;
+      if (req.file) {
+        cheminBon = req.file.path; // Accès correct au fichier
       }
-      const {dateEmission, drPrescripteur} = req.body
-      const idFichePatient = req.user.idFiche
-      const bon = await BonTransport.create(
-        { 
-          idFichePatient:idFichePatient
-          ,drPrescripteur:drPrescripteur
-          ,dateEmission:dateEmission
-          ,ficBon:cheminBon
-        })
+      const {dateEmission, drPrescripteur} = req.body;
+      const idFichePatient = req.user.idFiche;
+      const bon = await BonTransport.create({
+        idFichePatient: idFichePatient,
+        drPrescripteur: drPrescripteur,
+        dateEmission: dateEmission,
+        ficBon: cheminBon
+      });
       res.status(201).json({ message: "Bon déposé avec succès", idBon: bon.idBon });
     } catch (error) {
       res.status(400).json({ error: error.message });
     }
-  }else {
-    res.status(400).json({ error: "L'utilisateur n'a pas les droits necessaire" });
+  } else {
+    res.status(400).json({ error: "L'utilisateur n'a pas les droits nécessaires" });
   }
-
-})
-
+});
 
 
 app.post('/api/bon/bonfrommedecin', authenticateToken, upload.single('pdf'), async (req, res) => {
@@ -465,7 +462,12 @@ if(req.user.role == __ROLE_MEDECIN__){
 app.post('/api/bon/validateBon', authenticateToken, async (req, res) => {
   if (req.user.role === __ROLE_SUPERVISEUR__) {
     try {
-      const { idFiche, idBonTransport } = req.body;
+      const { idFiche, idBonTransport, nombreTransports } = req.body;
+
+      // Assurez-vous que nombreTransports est un nombre valide
+      if (isNaN(nombreTransports) || nombreTransports < 1) {
+        return res.status(400).json({ error: "Nombre de transports invalide" });
+      }
 
       // Mise à jour de la colonne 'valide' dans BonTransport
       await BonTransport.update(
@@ -473,19 +475,19 @@ app.post('/api/bon/validateBon', authenticateToken, async (req, res) => {
         { where: { id: idBonTransport } }
       );
 
-      // Incrémenter la colonne 'transport' dans FicheUser
+      // Incrémenter la colonne 'transport' dans FicheUser par le nombre spécifié
       await FicheUser.increment(
-        { TransportDispo: 1 },
+        { TransportDispo: nombreTransports },
         { where: { idFiche: idFiche } }
       );
 
       await Message.create({
         idFiche: idFiche,
         Objet: 'Validation de Bon de Transport',
-        Message: 'Votre bon de transport a été validé avec succès.'
+        Message: `Votre bon de transport a été validé avec succès. Nombre de transports disponibles ajoutés : ${nombreTransports}.`
       });
 
-      res.status(201).json({ message: "Bon de transport validé et nombre de transport mis à jour." });
+      res.status(201).json({ message: `Bon de transport validé et nombre de transport mis à jour de ${nombreTransports}.` });
     } catch (error) {
       res.status(400).json({ error: error.message });
     }
@@ -493,6 +495,7 @@ app.post('/api/bon/validateBon', authenticateToken, async (req, res) => {
     res.status(403).json({ error: "Vous ne possédez pas les droits nécessaires" });
   }
 });
+
 
 app.post('/api/bon/refuseBon', authenticateToken, async (req, res) => {
   if (req.user.role === __ROLE_SUPERVISEUR__) {
@@ -522,6 +525,45 @@ app.post('/api/bon/refuseBon', authenticateToken, async (req, res) => {
     res.status(403).json({ error: "Vous ne possédez pas les droits nécessaires" });
   }
 });
+
+app.get('/api/bon', authenticateToken, async (req, res) => {
+  switch (req.user.role) {
+    case __ROLE_SUPERVISEUR__:
+      try {
+        const bons = await BonTransport.findAll({
+          include: [
+            {
+              model: FicheUser,
+              as: 'ficheuser', // Utilisez l'alias défini dans l'association
+              attributes: ['idFiche', 'nom', 'prenom']
+            }
+          ]
+        });
+        
+        res.status(201).json({ bons });
+      } catch (error) {
+        res.status(400).json({ error: error.message });
+      }
+      break;
+    case __ROLE_UTILISATEUR__:
+      try {
+        const bons = await BonTransport.findAll({
+          where: {
+            idFichePatient: req.user.idFiche
+          }
+        });
+        res.status(201).json({ bons });
+      } catch (error) {
+        res.status(400).json({ error: error.message });
+      }
+      break;
+
+    default:
+      res.status(400).json({ error: "Vous ne possédez pas les droits necessaire" });
+      break;
+    }
+  }
+)
 
 
 
@@ -585,7 +627,16 @@ app.get('/api/reservation/nextresa', authenticateToken, async (req,res) =>{
     }
 })
 
+app.get('/files/*', (req, res) => {
+  const filepath = req.params[0];
+  const fullPath = path.join(__dirname, filepath);
 
+  res.sendFile(fullPath, (err) => {
+    if (err) {
+      res.status(404).send('Fichier non trouvé');
+    }
+  });
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

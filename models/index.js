@@ -23,6 +23,9 @@ const Reservation = setupReservation(sequelize)
 const BonTransport = setupBonTransport(sequelize);
 const Message = setupMessage(sequelize);
 
+BonTransport.associate && BonTransport.associate({ FicheUser });
+FicheUser.associate && FicheUser.associate({ BonTransport });
+
 // Synchronisez tous les modèles avec la base de données
 sequelize.sync();
 
