@@ -137,9 +137,13 @@ app.post('/api/users/register', async (req, res) => {
     }
 });
 
-app.post('/api/users/ficheuser', async (req,res) => {
+app.post('/api/users/ficheuser', async (req, res) => {
   try {
-    const {nom, prenom, adresse, ville, codepostal, mailcontact, telephone, role, idCNX, signature, idFicheMere, numSS} = req.body;
+    const { nom, prenom, adresse, ville, codepostal, mailcontact, telephone, role, idCNX, signature, idFicheMere, numSS } = req.body;
+
+    // Définir la valeur de Valide en fonction du rôle
+    const valide = role === __ROLE_UTILISATEUR__; // true si le rôle est __ROLE_UTILISATEUR__, sinon false
+
     const newFiche = await FicheUser.create({
       nom,
       prenom, 
@@ -153,12 +157,17 @@ app.post('/api/users/ficheuser', async (req,res) => {
       signature,
       idFicheMere,
       numSS,
-      TransportDispo:0
-    })
+      TransportDispo: 0,
+      Valide: valide // Utiliser la valeur définie ci-dessus
+    });
+
     res.status(201).json({ message: "Fiche utilisateur crée avec succès", ficheId: newFiche.idFiche });
   } catch (error) {
     res.status(400).json({ error: error.message });
-}});
+  }
+});
+
+
 
 
 
@@ -203,7 +212,33 @@ app.post('/api/users/fichepermis', upload.single('permis'), async (req, res) => 
   }
 });
 
+app.get('/api/users/taxinonvalide', authenticateToken, async (req,res) =>{
+  try {
+    const result = await FicheUser.findAll({
+      where: { Valide: false },
+      include: [
+          { 
+              model: FichePermis, 
+              as: 'permis',
+              attributes: ['numPermis', 'dateExpi', 'dateDel', 'ficPermis'],
+              required: true
+          },
+          {
+              model: FicheVehicule,
+              as: 'vehicule', // Utilisez l'alias défini dans l'association
+              attributes: ['Marque', 'Modele', 'Annee', 'numImmatriculation', 'numSerie', 'ficVehicule'],
+              required: true
+          },
+          
+      ],
+      attributes: ['nom', 'prenom', 'adresse', 'ville', 'codepostal', 'mailcontact', 'telephone']
+  });
 
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+})
 
 
 // Endpoint pour récupérer profil utilisateur
@@ -471,8 +506,8 @@ app.post('/api/bon/validateBon', authenticateToken, async (req, res) => {
 
       // Mise à jour de la colonne 'valide' dans BonTransport
       await BonTransport.update(
-        { valide: true },
-        { where: { id: idBonTransport } }
+        { Valide: true },
+        { where: { idBon: idBonTransport } }
       );
 
       // Incrémenter la colonne 'transport' dans FicheUser par le nombre spécifié
@@ -504,8 +539,8 @@ app.post('/api/bon/refuseBon', authenticateToken, async (req, res) => {
 
       // Mise à jour de la colonne 'valide' dans BonTransport pour marquer comme refusé
       await BonTransport.update(
-        { valide: false },
-        { where: { id: idBonTransport } }
+        { Valide: false },
+        { where: { idBon: idBonTransport } }
       );
 
       // Optionnel: Ajouter un message dans la table 'Message' pour notifier l'utilisateur du refus
@@ -531,6 +566,9 @@ app.get('/api/bon', authenticateToken, async (req, res) => {
     case __ROLE_SUPERVISEUR__:
       try {
         const bons = await BonTransport.findAll({
+          where: {
+            Valide: null // Ne sélectionner que les bons dont la colonne 'Valide' est à null
+          },
           include: [
             {
               model: FicheUser,

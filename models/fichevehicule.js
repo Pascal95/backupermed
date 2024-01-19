@@ -45,5 +45,11 @@ module.exports = (sequelize) => {
         tableName: 'Vehicule', // nom de la table dans la base de données
         timestamps: false // désactive la gestion automatique des timestamps par Sequelize
     })
+    FicheVehicule.associate = (models) => {
+        FicheVehicule.belongsTo(models.FicheUser, {
+            foreignKey: 'idFiche',
+            as: 'utilisateur'
+        });
+    };
     return FicheVehicule;
 }

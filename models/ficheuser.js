@@ -60,7 +60,11 @@ module.exports = (sequelize) => {
         TransportDispo:{
             type: DataTypes.INTEGER,
             allowNull:true
-        }
+        },
+        Valide: {
+            type: DataTypes.BOOLEAN,
+            allowNull: true
+        },
     }, {
     // Options du modèle
     sequelize, // instance de connexion
@@ -72,6 +76,14 @@ module.exports = (sequelize) => {
         FicheUser.hasMany(models.BonTransport, {
           foreignKey: 'idFichePatient',
           as: 'bonsTransport'
+        });
+        FicheUser.hasOne(models.FichePermis, {
+            foreignKey: 'idFiche',
+            as: 'permis'
+        });
+        FicheUser.hasOne(models.FicheVehicule, {
+            foreignKey: 'idFiche',
+            as: 'vehicule'
         });
       };
       
