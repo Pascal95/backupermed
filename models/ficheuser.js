@@ -85,6 +85,10 @@ module.exports = (sequelize) => {
             foreignKey: 'idFiche',
             as: 'vehicule'
         });
+        FicheUser.hasMany(models.Disponibilite, {
+            foreignKey: 'idTaxi',
+            as: 'Disponibilite'
+        });
       };
       
   return FicheUser;

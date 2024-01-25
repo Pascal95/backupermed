@@ -6,6 +6,8 @@ const setupFichePermisModel = require ('./fichepermis')
 const setupReservation = require ('./reservation')
 const setupBonTransport = require ('./BonTransport')
 const setupMessage = require ('./Message')
+const setupDisponibilite = require ('./Disponibilite')
+const setupJour = require ('./Jour')
 
 
 // Créez une nouvelle instance de Sequelize pour se connecter à votre base de données
@@ -22,11 +24,16 @@ const FichePermis = setupFichePermisModel(sequelize);
 const Reservation = setupReservation(sequelize)
 const BonTransport = setupBonTransport(sequelize);
 const Message = setupMessage(sequelize);
+const Jour = setupJour(sequelize);
+const Disponibilite = setupDisponibilite(sequelize);
 
-FicheUser.associate({ FichePermis, BonTransport, FicheVehicule });
+
+FicheUser.associate({ FichePermis, BonTransport, FicheVehicule, Disponibilite });
 FichePermis.associate({ FicheUser });
 FicheVehicule.associate({ FicheUser });
 BonTransport.associate({ FicheUser });
+Disponibilite.associate({ FicheUser, Jour });
+
 // Synchronisez tous les modèles avec la base de données
 sequelize.sync();
 
@@ -38,5 +45,7 @@ module.exports = {
   FichePermis,
   Reservation,
   BonTransport,
-  Message
+  Message,
+  Disponibilite,
+  Jour
 };

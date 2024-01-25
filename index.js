@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { User, FicheUser, FicheVehicule, FichePermis, Reservation, BonTransport, Message} = require('./models');
+const { User, FicheUser, FicheVehicule, FichePermis, Reservation, BonTransport, Message, Disponibilite, Jour} = require('./models');
 const crypto = require('crypto');
 const { Op } = require('sequelize');
 const multer = require('multer');
@@ -9,6 +9,7 @@ const path = require('path');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
 const { sequelize } = require('./models');
+const fs = require('fs');
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -64,27 +65,40 @@ function authenticateToken(req, res, next) {
 //Fonction
 
 //Envoie email
-async function sendEmail(recipient, subject, text) {
+async function sendEmail(recipient, replacements) {
   let transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
         user: 'richard.pascalpro@gmail.com',
         pass: 'shzw rrnb dcmj mgkl' // ou votre mot de passe d'application si l'authentification à deux facteurs est activée
     }
-});
-  try {
-    let info = await transporter.sendMail({
-      from: '"UperMed" <richard.pascalpro@gmail.com', // adresse d'envoi
-      to: recipient, // liste des destinataires
-      subject: subject, // Sujet
-      text: text, // corps du mail en texte brut
-      // html: "<b>Hello world?</b>" // corps du mail en HTML (optionnel)
   });
 
-  } catch (error) {
-    console.error("Erreur lors de l'envoi de l'email: ", error);
-        throw error;
-  }
+  fs.readFile("./email/template.html", 'utf8', async (err, htmlContent) => {
+    if (err) {
+        console.error("Erreur lors de la lecture du fichier HTML :", err);
+        return;
+    }
+
+    // Remplacement des placeholders par les valeurs réelles
+    let customizedHtmlContent = htmlContent
+        .replace(/\[OBJET\]/g, replacements.objet)
+        .replace(/\[MESSAGE\]/g, replacements.message)
+        .replace(/\[NOM\]/g, replacements.nom);
+
+    try {
+        let info = await transporter.sendMail({
+            from: '"UperMed" <richard.pascalpro@gmail.com>',
+            to: recipient,
+            subject: replacements.objet,
+            html: customizedHtmlContent
+        });
+
+        console.log("Email envoyé avec succès :", info.messageId);
+    } catch (error) {
+        console.error("Erreur lors de l'envoi de l'email :", error);
+    }
+  });
 
 }
 
@@ -99,6 +113,21 @@ const formatDate = (date) => {
 
   return `${year}${month}${day}${hour}${minute}${second}`;
 };
+
+app.post('/api/test/email', async (req, res) => {
+  const { email, objet, message, nom } = req.body;
+
+  const replacements = {
+      objet,
+      message,
+      nom
+  };
+
+  await sendEmail(email, replacements);
+
+  res.json({ message: "Email envoyé avec succès" });
+});
+
 // Endpoint pour la connexion
 app.post('/api/users/login', async (req, res) => {
   try {
@@ -129,8 +158,15 @@ app.post('/api/users/register', async (req, res) => {
         });
         const dateTime = formatDate(new Date());
         const link = "http://127.0.0.1:5173/InscriptionEtape/" + dateTime + newUser.id
-        const message = "Bonjour, vous etes en train de vous inscrire sur le site UperMed pour continuer l'inscription veuillez suivre le lien suivant : " + link
-        await sendEmail(email,"Inscription", message)
+        const message = "Vous etes en train de vous inscrire sur le site UperMed pour continuer l'inscription veuillez suivre le lien suivant : " + link
+        const objet = "Inscription UperMed"
+        const nom = ""
+        const replacements = {
+          objet,
+          message,
+          nom
+      };
+        await sendEmail(email,replacements)
         res.status(201).json({ message: "User created successfully", userId: newUser.id });
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -166,9 +202,6 @@ app.post('/api/users/ficheuser', async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
-
-
-
 
 
 app.post('/api/users/fichevehicule', upload.fields([{ name: 'carteGrise' }]), async (req, res) => {
@@ -231,11 +264,62 @@ app.get('/api/users/taxinonvalide', authenticateToken, async (req,res) =>{
           },
           
       ],
-      attributes: ['nom', 'prenom', 'adresse', 'ville', 'codepostal', 'mailcontact', 'telephone']
+      attributes: ['idFiche','nom', 'prenom', 'adresse', 'ville', 'codepostal', 'mailcontact', 'telephone']
   });
 
     res.json(result);
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+})
+
+app.post('/api/users/valideuser', authenticateToken, async (req,res) =>{
+
+  try{
+    const {idFiche} = req.body;
+    const user = await FicheUser.findByPk(idFiche);
+    await user.update({Valide: true});
+    const objet = "Validation de votre compte"
+    const message = "Votre compte a été validé avec succès"
+    const nom = user.prenom + " " + user.nom
+    const replacements = {
+      objet,
+      message,
+      nom
+    };
+    await sendEmail(user.mailcontact,replacements)
+    await Message.create({
+      idFiche: idFiche,
+      Objet: 'Validation de compte',
+      Message: `Votre compte a été validé avec succès.`
+    });
+    res.status(201).json({ message: "User validé avec succès"});
+  }catch (error){
+    res.status(500).json({ error: error.message });
+  }
+})
+
+app.post('/api/users/refuseuser', authenticateToken, async (req,res) =>{
+  try{
+    const {idFiche, message} = req.body;
+    const user = await FicheUser.findByPk(idFiche);
+    await user.update({Valide: false});
+    const objet = "Validation de votre compte"
+    const nom = user.prenom + " " + user.nom
+    const replacements = {
+      objet,
+      message,
+      nom
+    };
+    await sendEmail(user.mailcontact,replacements)
+
+    await Message.create({
+      idFiche: idFiche,
+      Objet: 'Refus de compte',
+      Message: message
+    });
+    res.status(201).json({ message: "User refusé avec succès"});
+  }catch (error){
     res.status(500).json({ error: error.message });
   }
 })
@@ -675,6 +759,116 @@ app.get('/files/*', (req, res) => {
     }
   });
 });
+
+
+app.post('/api/taxi/disponibilite', authenticateToken, async (req, res) => {
+  let idTaxi;
+
+  // Vérifiez le rôle de l'utilisateur
+  if (req.user.role === __ROLE_TAXI__) {
+      // Si l'utilisateur est un taxi, utilisez son idFiche comme idTaxi
+      idTaxi = req.user.idFiche;
+  } else if (req.user.role === __ROLE_SUPERVISEUR__) {
+      // Si l'utilisateur est un superviseur, récupérez l'idTaxi du corps de la requête
+      idTaxi = req.body.idTaxi;
+  } else {
+      // Si l'utilisateur n'est ni un taxi ni un superviseur, renvoyez une erreur
+      return res.status(403).json({ error: "Action non autorisée" });
+  }
+
+  // Créez la disponibilité avec idTaxi déterminé et d'autres données de req.body
+  try {
+      const nouvelleDisponibilite = await Disponibilite.create({
+          idTaxi: idTaxi,
+          idJour: req.body.idJour,
+          HeureDebutMatin: req.body.HeureDebutMatin,
+          HeureFinMatin: req.body.HeureFinMatin,
+          HeureDebutAprem: req.body.HeureDebutApresMidi,
+          HeureFinAprem: req.body.HeureFinApresMidi
+          // Ajoutez d'autres champs de disponibilité au besoin
+      });
+
+      res.status(201).json(nouvelleDisponibilite);
+  } catch (error) {
+      res.status(400).json({ error: error.message });
+  }
+});
+
+
+app.put('/api/disponibilites/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params; // ID de la disponibilité à mettre à jour
+
+  try {
+      // Trouver la disponibilité existante par son ID
+      const disponibilite = await Disponibilite.findByPk(id);
+
+      if (!disponibilite) {
+          return res.status(404).json({ error: "Disponibilité non trouvée" });
+      }
+
+      // Vérifier si l'utilisateur est autorisé à mettre à jour cette disponibilité
+      if (req.user.role === __ROLE_TAXI__ && disponibilite.idTaxi !== req.user.idFiche) {
+          // Si l'utilisateur est un taxi mais pas le propriétaire de cette disponibilité
+          return res.status(403).json({ error: "Action non autorisée" });
+      } else if (req.user.role === __ROLE_SUPERVISEUR__) {
+          // Si l'utilisateur est un superviseur, permettre la mise à jour
+          // Optionnel : Si l'idTaxi est fourni dans req.body, mise à jour de l'idTaxi
+          if (req.body.idTaxi) {
+              disponibilite.idTaxi = req.body.idTaxi;
+          }
+      } else {
+          // Si l'utilisateur n'est ni un taxi propriétaire ni un superviseur
+          return res.status(403).json({ error: "Action non autorisée" });
+      }
+
+      // Mise à jour de la disponibilité avec les nouvelles valeurs
+      disponibilite.idJour = req.body.idJour || disponibilite.idJour;
+      disponibilite.HeureDebutMatin = req.body.HeureDebutMatin || disponibilite.HeureDebutMatin;
+      disponibilite.HeureFinMatin = req.body.HeureFinMatin || disponibilite.HeureFinMatin;
+      disponibilite.HeureDebutApresMidi = req.body.HeureDebutApresMidi || disponibilite.HeureDebutApresMidi;
+      disponibilite.HeureFinApresMidi = req.body.HeureFinAprem || disponibilite.HeureFinApresMidi;
+      // Mettre à jour d'autres champs au besoin
+
+      await disponibilite.save(); // Sauvegarder les modifications
+
+      res.json(disponibilite);
+  } catch (error) {
+      res.status(400).json({ error: error.message });
+  }
+});
+
+
+app.get('/api/disponibilites/taxi/:idTaxi', authenticateToken, async (req, res) => {
+  const { idTaxi } = req.params; // ID du taxi pour lequel récupérer les disponibilités
+
+  try {
+      // Si l'utilisateur est un taxi et qu'il tente de voir les disponibilités d'un autre taxi, renvoyez une erreur
+      if (req.user.role === __ROLE_TAXI__ && req.user.idFiche !== parseInt(idTaxi)) {
+          return res.status(403).json({ error: "Action non autorisée" });
+      }
+
+      // Les superviseurs peuvent voir les disponibilités de tous les taxis, donc pas de vérification supplémentaire nécessaire pour __ROLE_SUPERVISEUR__
+
+      // Récupération des disponibilités pour le taxi spécifié
+      const disponibilites = await Disponibilite.findAll({
+          where: { idTaxi: idTaxi },
+          include: [
+              // Incluez ici d'autres modèles si nécessaire, par exemple le modèle 'Jour'
+              { model: Jour, as: 'Jour' } // Assurez-vous que l'association est correctement configurée
+          ]
+      });
+
+      if (disponibilites.length === 0) {
+          return res.status(404).json({ message: "Aucune disponibilité trouvée pour ce taxi" });
+      }
+
+      res.json(disponibilites);
+  } catch (error) {
+      res.status(500).json({ error: error.message });
+  }
+});
+
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
