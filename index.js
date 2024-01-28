@@ -775,7 +775,7 @@ app.post('/api/taxi/disponibilite', authenticateToken, async (req, res) => {
       // Si l'utilisateur n'est ni un taxi ni un superviseur, renvoyez une erreur
       return res.status(403).json({ error: "Action non autorisée" });
   }
-
+  console.log(req.body)
   // Créez la disponibilité avec idTaxi déterminé et d'autres données de req.body
   try {
       const nouvelleDisponibilite = await Disponibilite.create({
@@ -783,8 +783,8 @@ app.post('/api/taxi/disponibilite', authenticateToken, async (req, res) => {
           idJour: req.body.idJour,
           HeureDebutMatin: req.body.HeureDebutMatin,
           HeureFinMatin: req.body.HeureFinMatin,
-          HeureDebutAprem: req.body.HeureDebutApresMidi,
-          HeureFinAprem: req.body.HeureFinApresMidi
+          HeureDebutApresMidi: req.body.HeureDebutApresMidi,
+          HeureFinApresMidi: req.body.HeureFinApresMidi
           // Ajoutez d'autres champs de disponibilité au besoin
       });
 
@@ -838,8 +838,9 @@ app.put('/api/disponibilites/:id', authenticateToken, async (req, res) => {
 });
 
 
-app.get('/api/disponibilites/taxi/:idTaxi', authenticateToken, async (req, res) => {
-  const { idTaxi } = req.params; // ID du taxi pour lequel récupérer les disponibilités
+app.get('/api/disponibilites/taxi/:idTaxi?', authenticateToken, async (req, res) => {
+  // Utilisez l'ID du taxi fourni dans les paramètres de la requête ou l'ID de l'utilisateur authentifié si aucun ID n'est fourni
+  const idTaxi = req.params.idTaxi || req.user.idFiche;
 
   try {
       // Si l'utilisateur est un taxi et qu'il tente de voir les disponibilités d'un autre taxi, renvoyez une erreur
@@ -867,6 +868,7 @@ app.get('/api/disponibilites/taxi/:idTaxi', authenticateToken, async (req, res) 
       res.status(500).json({ error: error.message });
   }
 });
+
 
 
 
