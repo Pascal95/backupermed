@@ -49,6 +49,10 @@ module.exports = (sequelize) => {
             type: DataTypes.TIME,
             allowNull: true
         },
+        Etat:{
+            type: DataTypes.INTEGER,
+            allowNull: false
+        }
     },{
         // Options du modèle
         sequelize, // instance de connexion

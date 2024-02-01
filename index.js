@@ -41,6 +41,11 @@ const __ROLE_MEDECIN__ = 4
 const __ROLE_UTILISATEUR__ = 5
 const __ROLE_SANSCOMPTE__ = 6 
 
+const __ETAT_CONFIRME__ = 1
+const __ETAT_ENATTENTE__ = 2
+const __ETAT_ANNULE__ = 3
+
+
 
 const upload = multer({ storage: storage });
 
@@ -61,6 +66,24 @@ function authenticateToken(req, res, next) {
   });
 }
 
+function optionalAuthenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (token == null) {
+    return next(); // Continue sans vérifier le token
+  }
+
+  jwt.verify(token, 'secretKey', (err, user) => {
+    if (err) {
+      console.log('Token invalid:', err.message);
+      return res.sendStatus(403); // Token invalide
+    }
+
+    req.user = user;
+    next();
+  });
+}
 
 //Fonction
 
@@ -173,13 +196,16 @@ app.post('/api/users/register', async (req, res) => {
     }
 });
 
-app.post('/api/users/ficheuser', async (req, res) => {
+app.post('/api/users/ficheuser',optionalAuthenticateToken, async (req, res) => {
   try {
-    const { nom, prenom, adresse, ville, codepostal, mailcontact, telephone, role, idCNX, signature, idFicheMere, numSS } = req.body;
-
+    const { nom, prenom, adresse, ville, codepostal, mailcontact, telephone, role, idCNX, signature, numSS } = req.body;
+    let idFicheMere = 0;
     // Définir la valeur de Valide en fonction du rôle
-    const valide = role === __ROLE_UTILISATEUR__; // true si le rôle est __ROLE_UTILISATEUR__, sinon false
-
+    const valide = role === __ROLE_UTILISATEUR__ || role === __ROLE_SANSCOMPTE__;
+// true si le rôle est __ROLE_UTILISATEUR__, sinon false
+    if(req.user){
+      idFicheMere = req.user.idFiche
+    }
     const newFiche = await FicheUser.create({
       nom,
       prenom, 
@@ -347,11 +373,16 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
 app.get('/api/users/mesusers', authenticateToken,async (req,res) =>{
   try{
     const listeUser = await FicheUser.findAll({
-      where:{
-        idFicheMere:req.user.idFiche
+      where: {
+          [Op.or]: [
+              { idFicheMere: req.user.idFiche },
+              { idFiche: req.user.idFiche }
+          ]
       }
-    })
-    res.status(201).json({listeUser});
+  });
+    res.status(201).json({
+      listeUser
+    });
   }catch (error){
     res.status(500).json({ error: error.message });
   }
@@ -430,55 +461,99 @@ app.post('/api/users/reset-password', async (req, res) => {
 app.post('/api/reservation/newreservation', authenticateToken, async (req,res) => {
 
   try{
-    const {AdresseDepart, AdresseArrive, Distance, DureeTrajet, HeureConsult, HeureDepart, AllerRetour, DureeConsult} = req.body
-    const idClient = req.user.idFiche;
-    // Convertir HeureConsult en objet Date
-    const dateHeureConsult = new Date(HeureConsult);
-
-    // Formater la date pour correspondre à votre format SQL (YYYY-MM-DD)
-    const dateConsultation = dateHeureConsult.toISOString().split('T')[0];
+    const {AdresseDepart, AdresseArrive, Distance, DureeTrajet, HeureConsult, HeureDepart, AllerRetour, DureeConsult, idFicheUser} = req.body;
+    const idClient = idFicheUser
+    const user = await FicheUser.findByPk(idClient);
     
-    const [resultats] = await sequelize.query(`
-    SELECT 
-    U.idFiche AS idTaxi,
-    COALESCE(SUM(CASE 
-                WHEN R.allerretour = 1 THEN R.distance * 2 
-                ELSE R.distance 
-              END), 0) AS distanceTotale
-    FROM 
-        USR_Fiche U
-    LEFT JOIN 
-        Reservation R ON U.idFiche = R.idTaxi AND DATE(R.HeureConsult) = '${dateConsultation}'
-    WHERE 
-        U.role = 3
-    GROUP BY 
-        U.idFiche
-    ORDER BY 
-        distanceTotale ASC, 
-        COUNT(R.idTaxi) ASC  -- Ajoutez un critère de tri pour les taxis avec moins de réservations
-    LIMIT 1;
-    `);
+    // Calculer la déduction de TransportDispo en fonction de AllerRetour
+    const deductionTransport = AllerRetour ? 2 : 1;
 
-    if (resultats.length === 0) {
-      return res.status(404).json({ message: "Aucun taxi disponible trouvé" });
+    // Vérifier si l'utilisateur a assez de transports disponibles
+    if (user.TransportDispo < deductionTransport) {
+      console.log("Vous n'avez pas assez de transports disponibles pour l'utilisateur : " + user.idFiche);
+      return res.status(400).json({ errorCode: "NOT_ENOUGH_TRANSPORTS" });
     }
+    // Conversion des chaînes de date/heure en objets Date JavaScript
+    const dateHeureConsult = new Date(HeureConsult);
+    const dateHeureDepart = new Date(HeureDepart);
 
-    const idTaxi = resultats[0].idTaxi;
-    const newReservation = await Reservation.create({
-      idClient, 
-      idTaxi, 
-      AdresseDepart, 
-      AdresseArrive, 
-      Distance, 
-      DureeTrajet, 
-      HeureConsult, 
-      HeureDepart, 
-      AllerRetour, 
-      DureeConsult
-    })
-    res.status(201).json({ message: "Reservation crée avec succès", idReservation: newReservation.idReservation });
+    // Extraction du jour de la semaine et de l'heure de la consultation
+    const jourSemaine = dateHeureConsult.getDay();
+    const heureConsultation = dateHeureConsult.getHours();
+
+    const idJourDB = (jourSemaine === 0) ? 7 : jourSemaine;
+
+    // Vérifier si un taxi est disponible
+    const [resultats] = await sequelize.query(`
+      SELECT 
+      U.idFiche AS idTaxi,
+      COALESCE(SUM(CASE 
+                  WHEN R.allerretour = 1 THEN R.distance * 2 
+                  ELSE R.distance 
+                END), 0) AS distanceTotale
+      FROM 
+          USR_Fiche U
+      LEFT JOIN 
+          Reservation R ON U.idFiche = R.idTaxi AND DATE(R.HeureConsult) = '${dateHeureConsult.toISOString().split('T')[0]}'
+      LEFT JOIN 
+          Disponibilite D ON U.idFiche = D.idTaxi AND D.idJour = ${idJourDB}
+      WHERE 
+          U.role = 3
+          AND (
+            '${heureConsultation}' BETWEEN D.HeureDebutMatin AND D.HeureFinMatin 
+            OR '${heureConsultation}' BETWEEN D.HeureDebutApresMidi AND D.HeureFinApresMidi)
+      GROUP BY 
+          U.idFiche
+      ORDER BY 
+          distanceTotale ASC, 
+          COUNT(R.idTaxi) ASC
+      LIMIT 1;
+    `);
+    
+    
+    let idTaxi;
+    let Etat;
+    if (resultats.length === 0) {
+      idTaxi = 0;
+      Etat = __ETAT_ENATTENTE__;
+      // Réservation créée mais en attente de taxi
+      const newReservation = await Reservation.create({
+        idClient, 
+        idTaxi, 
+        AdresseDepart, 
+        AdresseArrive, 
+        Distance, 
+        DureeTrajet, 
+        HeureConsult, 
+        HeureDepart, 
+        AllerRetour, 
+        DureeConsult,
+        Etat
+      });
+      return res.status(400).json({ idReservation: newReservation.idReservation, Etat: Etat, errorCode: "TAXI_PENDING" });    
+    } else {
+      idTaxi = resultats[0].idTaxi;
+      Etat = __ETAT_CONFIRME__;
+      // Décrémenter TransportDispo pour l'utilisateur
+      await FicheUser.update({ TransportDispo: user.TransportDispo - deductionTransport }, { where: { idFiche: idClient } });
+      const newReservation = await Reservation.create({
+        idClient, 
+        idTaxi, 
+        AdresseDepart, 
+        AdresseArrive, 
+        Distance, 
+        DureeTrajet, 
+        HeureConsult, 
+        HeureDepart, 
+        AllerRetour, 
+        DureeConsult,
+        Etat
+      });
+      return res.status(201).json({ idReservation: newReservation.idReservation, Etat: Etat });
+    }
   } catch (error){
-    res.status(400).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ errorCode: "SERVER_ERROR" });
   }
 })
 
@@ -538,7 +613,7 @@ app.post('/api/bon/bonfromcli', authenticateToken, upload.single('BonTransport')
         cheminBon = req.file.path; // Accès correct au fichier
       }
       const {dateEmission, drPrescripteur} = req.body;
-      const idFichePatient = req.user.idFiche;
+      const idFichePatient = req.body.idFicheUser;
       const bon = await BonTransport.create({
         idFichePatient: idFichePatient,
         drPrescripteur: drPrescripteur,
