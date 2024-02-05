@@ -1,4 +1,5 @@
 const { Sequelize } = require('sequelize');
+require('dotenv').config();
 const setupUserModel = require('./users');
 const setupFicheUserModel = require ('./ficheuser')
 const setupFicheVehiculeModel = require ('./fichevehicule')
@@ -11,8 +12,8 @@ const setupJour = require ('./Jour')
 
 
 // Créez une nouvelle instance de Sequelize pour se connecter à votre base de données
-const sequelize = new Sequelize('UperMed', 'richard', 'richard', {
-  host: '162.19.75.199',
+const sequelize = new Sequelize(process.env.DB_DATABASE, process.env.DB_USERNAME, process.env.DB_PASSWORD, {
+  host: process.env.DB_HOST,
   dialect: 'mysql',
 });
 
@@ -28,11 +29,13 @@ const Jour = setupJour(sequelize);
 const Disponibilite = setupDisponibilite(sequelize);
 
 
-FicheUser.associate({ FichePermis, BonTransport, FicheVehicule, Disponibilite });
+FicheUser.associate({ FichePermis, BonTransport, FicheVehicule, Disponibilite, Message, Reservation });
 FichePermis.associate({ FicheUser });
 FicheVehicule.associate({ FicheUser });
 BonTransport.associate({ FicheUser });
 Disponibilite.associate({ FicheUser, Jour });
+Message.associate({ FicheUser });
+Reservation.associate({ FicheUser });
 
 // Synchronisez tous les modèles avec la base de données
 sequelize.sync();

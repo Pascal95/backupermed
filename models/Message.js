@@ -21,6 +21,10 @@ module.exports = (sequelize) => {
             type: DataTypes.STRING,
             allowNull: true
         },
+        createdAt: {
+            type: DataTypes.DATE,
+            allowNull: true
+        },
     },{
         // Options du modèle
         sequelize, // instance de connexion
@@ -28,5 +32,13 @@ module.exports = (sequelize) => {
         tableName: 'Message', // nom de la table dans la base de données
         timestamps: false // désactive la gestion automatique des timestamps par Sequelize
     })
+
+    Message.associate = (models) => {
+        Message.belongsTo(models.FicheUser, {
+            foreignKey: 'idFiche', 
+            as: 'destinataire'
+        });
+    }
+
     return Message;
 }

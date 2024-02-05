@@ -89,6 +89,13 @@ module.exports = (sequelize) => {
             foreignKey: 'idTaxi',
             as: 'Disponibilite'
         });
+        FicheUser.hasMany(models.Message, {
+            foreignKey: 'idFiche'
+        });
+        FicheUser.hasMany(models.Reservation, {
+            foreignKey: 'idTaxi',
+            as: 'Taxi'
+        });
       };
       
   return FicheUser;

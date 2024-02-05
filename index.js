@@ -10,6 +10,8 @@ const nodemailer = require('nodemailer');
 const cors = require('cors');
 const { sequelize } = require('./models');
 const fs = require('fs');
+require('dotenv').config();
+
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -59,7 +61,7 @@ function authenticateToken(req, res, next) {
   const token = authHeader && authHeader.split(' ')[1];
   if (token == null) return res.sendStatus(401);
 
-  jwt.verify(token, 'secretKey', (err, user) => {
+  jwt.verify(token, process.env.AUTH_TOKEN, (err, user) => {
       if (err) return res.sendStatus(403);
       req.user = user;
       next();
@@ -74,7 +76,7 @@ function optionalAuthenticateToken(req, res, next) {
     return next(); // Continue sans vérifier le token
   }
 
-  jwt.verify(token, 'secretKey', (err, user) => {
+  jwt.verify(token, process.env.AUTH_TOKEN, (err, user) => {
     if (err) {
       console.log('Token invalid:', err.message);
       return res.sendStatus(403); // Token invalide
@@ -92,8 +94,8 @@ async function sendEmail(recipient, replacements) {
   let transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-        user: 'richard.pascalpro@gmail.com',
-        pass: 'shzw rrnb dcmj mgkl' // ou votre mot de passe d'application si l'authentification à deux facteurs est activée
+        user: process.env.MAIL_USER,
+        pass: process.env.MAIL_PASSWORD // ou votre mot de passe d'application si l'authentification à deux facteurs est activée
     }
   });
 
@@ -111,7 +113,7 @@ async function sendEmail(recipient, replacements) {
 
     try {
         let info = await transporter.sendMail({
-            from: '"UperMed" <richard.pascalpro@gmail.com>',
+            from: '"UperMed" <'+process.env.MAIL_USER+'>',
             to: recipient,
             subject: replacements.objet,
             html: customizedHtmlContent
@@ -162,7 +164,7 @@ app.post('/api/users/login', async (req, res) => {
       
       await user.update({ derniereconnexion: new Date() });
       const fiche = await FicheUser.findOne({where: {idCNX: user.id}})
-      const token = jwt.sign({ idFiche: fiche.idFiche, role: fiche.role }, 'secretKey', { expiresIn: '1h' });
+      const token = jwt.sign({ idFiche: fiche.idFiche, role: fiche.role }, process.env.AUTH_TOKEN, { expiresIn: '1h' });
       res.json({ token });
   } catch (error) {
       res.status(500).json({ error: error.message });
@@ -180,7 +182,7 @@ app.post('/api/users/register', async (req, res) => {
             datecreation: new Date(),
         });
         const dateTime = formatDate(new Date());
-        const link = "http://127.0.0.1:5173/InscriptionEtape/" + dateTime + newUser.id
+        const link = process.env.URL + "/InscriptionEtape/" + dateTime + newUser.id
         const message = "Vous etes en train de vous inscrire sur le site UperMed pour continuer l'inscription veuillez suivre le lien suivant : " + link
         const objet = "Inscription UperMed"
         const nom = ""
@@ -228,6 +230,48 @@ app.post('/api/users/ficheuser',optionalAuthenticateToken, async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
+
+app.put('/api/users/ficheuser/:id', authenticateToken, async (req, res) => {
+  const idFicheUser = req.params.id; // Récupérer l'ID de la FicheUser depuis l'URL
+  const { nom, prenom, adresse, ville, codepostal, mailcontact, telephone, role, idCNX, signature, idFicheMere, numSS, TransportDispo, Valide } = req.body;
+
+  try {
+    // Recherche la fiche user par son ID
+    const ficheUser = await FicheUser.findByPk(idFicheUser);
+
+    // Si la fiche n'existe pas, renvoie une erreur 404
+    if (!ficheUser) {
+      return res.status(404).json({ error: "Fiche utilisateur non trouvée." });
+    }
+
+    // Met à jour la fiche avec les données reçues
+    await FicheUser.update({
+      nom,
+      prenom, 
+      adresse, 
+      ville, 
+      codepostal, 
+      mailcontact, 
+      telephone, 
+      role, 
+      idCNX, 
+      signature,
+      idFicheMere,
+      numSS,
+      TransportDispo,
+      Valide
+    }, {
+      where: { idFiche: idFicheUser }
+    });
+
+    // Renvoie une réponse de succès
+    res.json({ message: "Fiche utilisateur mise à jour avec succès." });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erreur lors de la mise à jour de la fiche utilisateur." });
+  }
+});
+
 
 
 app.post('/api/users/fichevehicule', upload.fields([{ name: 'carteGrise' }]), async (req, res) => {
@@ -370,25 +414,50 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
     }
 });
 
-app.get('/api/users/mesusers', authenticateToken,async (req,res) =>{
-  try{
+app.get('/api/users/mesusers', authenticateToken, async (req, res) => {
+  try {
+    let conditions = {}; // Conditions de recherche initiales
+
+    // Si l'utilisateur est un superviseur, ajustez les conditions pour exclure les superviseurs des résultats
+    if (req.user.role === __ROLE_SUPERVISEUR__) {
+      conditions = {
+        role: { [Op.ne]: __ROLE_SUPERVISEUR__ } // 'Op.ne' signifie 'not equal'
+      };
+    } else {
+      // Pour un utilisateur normal, cherchez ses utilisateurs liés et lui-même
+      conditions = {
+        [Op.or]: [
+          { idFicheMere: req.user.idFiche },
+          { idFiche: req.user.idFiche }
+        ]
+      };
+    }
+
     const listeUser = await FicheUser.findAll({
-      where: {
-          [Op.or]: [
-              { idFicheMere: req.user.idFiche },
-              { idFiche: req.user.idFiche }
-          ]
-      }
-  });
-    res.status(201).json({
+      where: conditions
+    });
+
+    res.status(200).json({
       listeUser
     });
-  }catch (error){
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
 
-})
+app.get('/api/users/taxis', authenticateToken, async (req, res) => {
+  try {
+    const taxis = await FicheUser.findAll({
+      where: { role: __ROLE_TAXI__ }
+    });
 
+    res.status(200).json({
+      taxis
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Demande MDP oublié
 app.post('/api/users/forgot-password', async (req, res) => {
@@ -555,6 +624,48 @@ app.post('/api/reservation/newreservation', authenticateToken, async (req,res) =
     console.error(error);
     res.status(500).json({ errorCode: "SERVER_ERROR" });
   }
+})
+
+app.put('/api/reservation/annulerreservation', authenticateToken, async (req,res) => {
+  try{
+    const {idReservation} = req.body;
+    const reservation = await Reservation.findByPk(idReservation);
+    if (reservation.Etat ===  __ETAT_CONFIRME__ || reservation.Etat === __ETAT_ENATTENTE__ ){
+      await reservation.update({Etat: __ETAT_ANNULE__});
+      return res.status(201).json({ message: "Reservation annulée avec succès"});
+    } else {
+      return res.status(400).json({ error: "La reservation ne peut pas etre annulée"});
+    }
+  } catch (error){
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+})
+
+app.put('/api/reservation/modiftaxi', authenticateToken, async (req,res) => {
+  try {
+    const { idReservation, idTaxi } = req.body;
+    
+    // Find the reservation by its primary key
+    const reservation = await Reservation.findByPk(idReservation);
+
+    if (!reservation) {
+      return res.status(404).json({ error: "Reservation not found" });
+    }
+
+    // Update the reservation with the new taxi ID and set its status to validated
+    // Assuming 'validated' status is represented by a specific value, for example, 1
+    const updatedReservation = await reservation.update({
+      idTaxi: idTaxi,
+      Etat: __ETAT_CONFIRME__, // Replace __ETAT_VALIDE__ with the actual value representing 'validated' status in your database
+    });
+
+    res.status(200).json({ message: "Taxi modified successfully and reservation validated", updatedReservation });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "An error occurred while updating the reservation" });
+  }
+
 })
 
 // Endpoint pour voir les reservations
@@ -769,15 +880,26 @@ app.get('/api/reservation/nextresa', authenticateToken, async (req,res) =>{
   switch (req.user.role) {
     case __ROLE_SUPERVISEUR__:
       try{
-        const maintenant = new Date()
+        const maintenant = new Date();
         const reservations = await Reservation.findAll({
-          where:{
+          where: {
             HeureDepart: {
-              [Op.gt]:maintenant
+              [Op.gt]: maintenant
             }
-          }
-        })
-        res.status(201).json({reservations});
+          },
+          include: [{
+            model: FicheUser,
+            as: 'Taxi', // Assurez-vous que cette association est correctement définie dans vos modèles
+            attributes: ['nom', 'prenom']
+          }]
+        });
+        // Préparer les données pour inclure les informations du taxi dans la réponse
+        const reservationsWithTaxiInfo = reservations.map(reservation => ({
+          ...reservation.toJSON(),
+          TaxiNom: reservation.Taxi?.nom,
+          TaxiPrenom: reservation.Taxi?.prenom,
+        }));
+        res.status(201).json({reservations: reservationsWithTaxiInfo});
       } catch(error){
         res.status(400).json({ error: error.message });
       }
@@ -799,20 +921,45 @@ app.get('/api/reservation/nextresa', authenticateToken, async (req,res) =>{
         res.status(400).json({ error: error.message });
       }
       break;
-
       case __ROLE_UTILISATEUR__:
-        try{
-          const maintenant = new Date()
+        try {
+          const maintenant = new Date();
+          // Assurez-vous d'inclure le modèle FicheUser pour les taxis et un autre pour les clients (utilisateurs rattachés)
           const reservations = await Reservation.findAll({
-            where:{
-              idClient:req.user.idFiche,
+            where: {
+              [Op.or]: [
+                { idClient: req.user.idFiche },
+                { '$Client.idFicheMere$': req.user.idFiche }
+              ],
               HeureDepart: {
-                [Op.gt]:maintenant
+                [Op.gt]: maintenant
               }
-            }
-          })
-          res.status(201).json({reservations});
-        } catch(error){
+            },
+            include: [
+              {
+                model: FicheUser,
+                as: 'Taxi',
+                attributes: ['nom', 'prenom']
+              },
+              {
+                model: FicheUser,
+                as: 'Client', // Supposons que vous ayez cette association définie pour pointer vers l'utilisateur qui a fait la réservation
+                attributes: ['nom', 'prenom']
+              }
+            ]
+          });
+      
+          // Transformer les données pour inclure les informations nécessaires
+          const reservationsTransformed = reservations.map(reservation => ({
+            ...reservation.toJSON(),
+            TaxiNom: reservation.Taxi?.nom,
+            TaxiPrenom: reservation.Taxi?.prenom,
+            ClientNom: reservation.Client?.nom, // Nom du client (utilisateur rattaché)
+            ClientPrenom: reservation.Client?.prenom, // Prénom du client (utilisateur rattaché)
+          }));
+      
+          res.status(201).json({ reservations: reservationsTransformed });
+        } catch (error) {
           res.status(400).json({ error: error.message });
         }
         break;
@@ -944,7 +1091,74 @@ app.get('/api/disponibilites/taxi/:idTaxi?', authenticateToken, async (req, res)
   }
 });
 
+app.get('/api/messages', authenticateToken, async (req, res) => {
+  try {
+      const idFichePrincipal = req.user.idFiche; // ID de l'utilisateur principal obtenu à partir du token JWT
+      
+      // Récupérer tous les ID des fiches utilisateurs rattachées, incluant l'utilisateur principal
+      const fichesUtilisateurs = await FicheUser.findAll({
+          where: {
+              [Op.or]: [{ idFiche: idFichePrincipal }, { idFicheMere: idFichePrincipal }]
+          },
+          attributes: ['idFiche']
+      });
+      
+      // Extraire les ID des fiches pour la requête des messages
+      const idsFiches = fichesUtilisateurs.map(fiche => fiche.idFiche);
+      
+      // Récupérer les messages pour tous les ID de fiches trouvés, avec le nom et le prénom du destinataire
+      const messages = await Message.findAll({
+          where: {
+              idFiche: idsFiches
+          },
+          include: [{
+              model: FicheUser, // Assurez-vous que l'association est bien configurée dans vos modèles Sequelize
+              as: 'destinataire', // Utilisez l'alias approprié si vous en avez défini un dans l'association
+              attributes: ['nom', 'prenom']
+          }],
+          order: [['createdAt', 'DESC']] // Optionnel : trier les messages par date de création
+      });
 
+      res.json(messages.map(message => {
+          // Structurez le JSON de réponse comme vous le souhaitez ici
+          return {
+              idMessage: message.id,
+              objet: message.Objet,
+              contenu: message.Message,
+              dateEnvoi: message.createdAt,
+              destinataire: {
+                  nom: message.destinataire.nom,
+                  prenom: message.destinataire.prenom
+              }
+          };
+      }));
+  } catch (error) {
+      console.error('Erreur lors de la récupération des messages :', error);
+      res.status(500).json({ error: "Erreur interne du serveur" });
+  }
+});
+
+app.post('/api/messages', authenticateToken, async (req, res) => {
+  if (req.user.role !== __ROLE_SUPERVISEUR__) {
+      return res.status(403).json({ error: "Action non autorisée" });
+  }
+  try {
+      const { idFiche, objet, contenu } = req.body;
+
+      // Créer un message avec les données reçues
+      const message = await Message.create({
+          idFiche: idFiche,
+          Objet: objet,
+          Message: contenu
+      });
+
+      res.status(201).json({ message: "Message envoyé avec succès", idMessage: message.id });
+  } catch (error) {
+      console.error('Erreur lors de l\'envoi du message :', error);
+      res.status(500).json({ error: "Erreur interne du serveur" });
+  }
+}
+);
 
 
 const PORT = process.env.PORT || 3000;

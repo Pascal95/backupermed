@@ -60,5 +60,17 @@ module.exports = (sequelize) => {
         tableName: 'Reservation', // nom de la table dans la base de données
         timestamps: false // désactive la gestion automatique des timestamps par Sequelize
     })
+    Reservation.associate = (models) => {
+        Reservation.belongsTo(
+            models.FicheUser, { 
+                foreignKey: 'idTaxi', as: 'Taxi' 
+            }
+        );
+        Reservation.belongsTo(
+            models.FicheUser, { 
+                foreignKey: 'idClient', as: 'Client' 
+            }
+        );
+    }
     return Reservation;
 }
