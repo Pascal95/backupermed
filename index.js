@@ -274,14 +274,14 @@ app.put('/api/users/ficheuser/:id', authenticateToken, async (req, res) => {
 
 
 
-app.post('/api/users/fichevehicule', upload.fields([{ name: 'carteGrise' }]), async (req, res) => {
+app.post('/api/users/fichevehicule', upload.single([{ name: 'carteGrise' }]), async (req, res) => {
   try {
     const { Marque, Modele, Annee, numImmatriculation, numSerie, idFiche } = req.body;
 
     // Chemin du fichier téléchargé pour la carte grise
     let cheminCarteGrise = "";
-    if (req.file['carteGrise']) {
-      cheminCarteGrise = req.file['carteGrise'][0].path;
+    if (req.file) {
+      cheminCarteGrise = req.file.path;
     }
 
     const newFicheVehicule = await FicheVehicule.create({

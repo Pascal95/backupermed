@@ -1,3 +1,4 @@
 config.js
 uploads
 .env
+node_modules
