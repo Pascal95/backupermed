@@ -287,7 +287,11 @@ app.post('/api/users/fichevehicule', upload.single('carteGrise'), async (req, re
     const newFicheVehicule = await FicheVehicule.create({
       Marque, Modele, Annee, numImmatriculation, numSerie, ficVehicule: cheminCarteGrise, idFiche
     });
-
+    await Message.create({
+      idFiche: idFiche,
+      Objet: "Profile en cours d'analyse",
+      Message: `Nos équipes reviendront vers vous des que votre profile sera validé. Merci de votre patience.`
+    });
     res.status(201).json({ message: "Fiche vehicule crée avec succès", ficheVehiculeId: newFicheVehicule.idVehicule });
   } catch (error) {
     res.status(400).json({ error: error.message });
