@@ -274,7 +274,7 @@ app.put('/api/users/ficheuser/:id', authenticateToken, async (req, res) => {
 
 
 
-app.post('/api/users/fichevehicule', upload.single([{ name: 'carteGrise' }]), async (req, res) => {
+app.post('/api/users/fichevehicule', upload.single('carteGrise'), async (req, res) => {
   try {
     const { Marque, Modele, Annee, numImmatriculation, numSerie, idFiche } = req.body;
 
