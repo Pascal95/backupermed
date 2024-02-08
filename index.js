@@ -319,33 +319,105 @@ app.post('/api/users/fichepermis', upload.single('permis'), async (req, res) => 
   }
 });
 
-app.get('/api/users/taxinonvalide', authenticateToken, async (req,res) =>{
+app.put('/api/users/fichepermis/:idFichePermis', upload.single('permis'), async (req, res) => {
   try {
+    const { idFichePermis } = req.params;
+    const { numPermis, dateDel, dateExpi, idFiche } = req.body;
+
+    let cheminFicPermis = "";
+    if (req.file) {
+      cheminFicPermis = req.file.path;
+    }
+
+    const fichePermis = await FichePermis.findByPk(idFichePermis);
+    if (!fichePermis) {
+      return res.status(404).json({ message: "Fiche permis introuvable." });
+    }
+
+    await fichePermis.update({
+      numPermis, 
+      dateDel, 
+      dateExpi, 
+      ficPermis: cheminFicPermis, 
+      idFiche
+    });
+
+    res.status(200).json({ message: "Fiche permis modifiée avec succès", fichePermisId: fichePermis.idPermis });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.put('/api/users/fichevehicule/:idFicheVehicule', upload.single('carteGrise'), async (req, res) => {
+  try {
+    const { idFicheVehicule } = req.params;
+    const { Marque, Modele, Annee, numImmatriculation, numSerie, idFiche } = req.body;
+
+    let cheminCarteGrise = "";
+    if (req.file) {
+      cheminCarteGrise = req.file.path;
+    }
+
+    const ficheVehicule = await FicheVehicule.findByPk(idFicheVehicule);
+    if (!ficheVehicule) {
+      return res.status(404).json({ message: "Fiche véhicule introuvable." });
+    }
+
+    await ficheVehicule.update({
+      Marque, 
+      Modele, 
+      Annee, 
+      numImmatriculation, 
+      numSerie, 
+      ficVehicule: cheminCarteGrise, 
+      idFiche
+    });
+
+    res.status(200).json({ message: "Fiche véhicule modifiée avec succès", ficheVehiculeId: ficheVehicule.idVehicule });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+
+
+app.get('/api/users/taxinonvalide', authenticateToken, async (req, res) => {
+  try {
+    let condition = {};
+    // Si l'utilisateur est un taxi, limitez la recherche à son propre ID
+    if (req.user.role === __ROLE_TAXI__) { // Remplacez __ROLE_TAXI__ par la valeur correcte pour le rôle taxi
+      condition.idFiche = req.user.idFiche;
+    } else if (req.user.role === __ROLE_SUPERVISEUR__) { // Remplacez __ROLE_SUPERVISEUR__ par la valeur correcte pour le rôle superviseur
+      // Si l'utilisateur est un superviseur, recherchez tous les utilisateurs non validés
+      condition.Valide = false;
+    }
+
     const result = await FicheUser.findAll({
-      where: { Valide: false },
+      where: condition,
       include: [
           { 
               model: FichePermis, 
               as: 'permis',
-              attributes: ['numPermis', 'dateExpi', 'dateDel', 'ficPermis'],
+              attributes: ['idPermis','numPermis', 'dateExpi', 'dateDel', 'ficPermis'],
               required: true
           },
           {
               model: FicheVehicule,
-              as: 'vehicule', // Utilisez l'alias défini dans l'association
-              attributes: ['Marque', 'Modele', 'Annee', 'numImmatriculation', 'numSerie', 'ficVehicule'],
+              as: 'vehicule',
+              attributes: ['idVehicule','Marque', 'Modele', 'Annee', 'numImmatriculation', 'numSerie', 'ficVehicule'],
               required: true
           },
-          
       ],
       attributes: ['idFiche','nom', 'prenom', 'adresse', 'ville', 'codepostal', 'mailcontact', 'telephone']
-  });
+    });
 
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
-})
+});
+
+
 
 app.post('/api/users/valideuser', authenticateToken, async (req,res) =>{
 
