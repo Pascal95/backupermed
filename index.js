@@ -407,7 +407,8 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
           codepostal: user.codepostal,
           mailcontact: user.mailcontact,
           telephone: user.telephone,
-          role: user.role
+          role: user.role,
+          Valide: user.Valide
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
