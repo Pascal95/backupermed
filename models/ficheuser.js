@@ -11,23 +11,23 @@ module.exports = (sequelize) => {
           },
         nom:{
             type: DataTypes.STRING,
-            allowNull: false
+            allowNull: true
         },
         prenom:{
             type: DataTypes.STRING,
-            allowNull: false
+            allowNull: true
         },
         adresse:{
             type: DataTypes.STRING,
-            allowNull: false
+            allowNull: true
         },
         ville:{
             type: DataTypes.STRING,
-            allowNull: false
+            allowNull: true
         },
         codepostal:{
             type: DataTypes.STRING,
-            allowNull: false
+            allowNull: true
         },
         mailcontact:{
             type: DataTypes.STRING,
@@ -35,7 +35,7 @@ module.exports = (sequelize) => {
         },
         telephone:{
             type: DataTypes.STRING,
-            allowNull: false
+            allowNull: true
         },
         role:{
             type: DataTypes.INTEGER,

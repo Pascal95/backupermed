@@ -23,7 +23,7 @@ module.exports = (sequelize) => {
     },
     password: {
       type: DataTypes.STRING,
-      allowNull: false
+      allowNull: true
     },
     datecreation: {
       type: DataTypes.DATE,
@@ -40,7 +40,11 @@ module.exports = (sequelize) => {
       resetPasswordExpires: {
         type: DataTypes.DATE,
         allowNull: true,
-      }
+      },
+    USR_KEY: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
   }, {
     // Options du modèle
     sequelize, // instance de connexion

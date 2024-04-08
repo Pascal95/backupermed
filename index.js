@@ -11,6 +11,7 @@ const cors = require('cors');
 const { sequelize } = require('./models');
 const fs = require('fs');
 require('dotenv').config();
+const moment = require('moment');
 
 
 const storage = multer.diskStorage({
@@ -88,6 +89,16 @@ function optionalAuthenticateToken(req, res, next) {
 }
 
 //Fonction
+
+function genererChaineAlphanumeriqueAleatoire(longueur) {
+  const caracteresPossibles = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let resultat = '';
+  for (let i = 0; i < longueur; i++) {
+      const indexAleatoire = Math.floor(Math.random() * caracteresPossibles.length);
+      resultat += caracteresPossibles[indexAleatoire];
+  }
+  return resultat;
+}
 
 //Envoie email
 async function sendEmail(recipient, replacements) {
@@ -607,59 +618,73 @@ app.post('/api/users/reset-password', async (req, res) => {
 app.post('/api/reservation/newreservation', authenticateToken, async (req,res) => {
 
   try{
-    const {AdresseDepart, AdresseArrive, Distance, DureeTrajet, HeureConsult, HeureDepart, AllerRetour, DureeConsult, idFicheUser} = req.body;
-    const idClient = idFicheUser
+    const { AdresseDepart, AdresseArrive, Distance, DureeTrajet, HeureConsult, HeureDepart, AllerRetour, DureeConsult, idFicheUser } = req.body;
+    const idClient = idFicheUser;
     const user = await FicheUser.findByPk(idClient);
-    
-    // Calculer la déduction de TransportDispo en fonction de AllerRetour
-    const deductionTransport = AllerRetour ? 2 : 1;
 
-    // Vérifier si l'utilisateur a assez de transports disponibles
+    if (!user) {
+      return res.status(404).json({ errorCode: "USER_NOT_FOUND" });
+    }
+
+    const deductionTransport = AllerRetour ? 2 : 1;
     if (user.TransportDispo < deductionTransport) {
-      console.log("Vous n'avez pas assez de transports disponibles pour l'utilisateur : " + user.idFiche);
       return res.status(400).json({ errorCode: "NOT_ENOUGH_TRANSPORTS" });
     }
-    // Conversion des chaînes de date/heure en objets Date JavaScript
-    const dateHeureConsult = new Date(HeureConsult);
-    const dateHeureDepart = new Date(HeureDepart);
 
-    // Extraction du jour de la semaine et de l'heure de la consultation
-    const jourSemaine = dateHeureConsult.getDay();
-    const heureConsultation = dateHeureConsult.getHours();
+    const heureConsultFormat = moment(HeureConsult).format("HH:mm:ss");
+    const jourSemaine = moment(HeureConsult).day();
+    const idJourDB = jourSemaine === 0 ? 7 : jourSemaine;
 
-    const idJourDB = (jourSemaine === 0) ? 7 : jourSemaine;
+    const sqlQuery = `
+    SELECT U.idFiche AS idTaxi,
+    COALESCE(SUM(CASE WHEN R.allerretour = 1 THEN R.distance * 2 ELSE R.distance END), 0) AS distanceTotale
+FROM USR_Fiche U
+LEFT JOIN Reservation R ON U.idFiche = R.idTaxi AND DATE(R.HeureDepart) = DATE(?)
+INNER JOIN Disponibilite D ON U.idFiche = D.idTaxi AND D.idJour = ?
+WHERE U.role = 3
+    AND NOT EXISTS (
+        SELECT 1
+        FROM Reservation R2
+        WHERE R2.idTaxi = U.idFiche 
+        AND (
+            (R2.HeureDepart <= ? AND DATE_ADD(R2.HeureDepart, INTERVAL R2.DureeTrajet HOUR) > ?)
+            OR
+            (R2.HeureDepart < DATE_ADD(?, INTERVAL ? HOUR) AND DATE_ADD(R2.HeureDepart, INTERVAL R2.DureeTrajet HOUR) >= ?)
+        )
+    )
+    AND (? BETWEEN D.HeureDebutMatin AND D.HeureFinMatin OR ? BETWEEN D.HeureDebutApresMidi AND D.HeureFinApresMidi)
+GROUP BY U.idFiche
+HAVING distanceTotale = MIN(distanceTotale)
+ORDER BY distanceTotale
+LIMIT 1;
 
-    // Vérifier si un taxi est disponible
-    const [resultats] = await sequelize.query(`
-      SELECT 
-      U.idFiche AS idTaxi,
-      COALESCE(SUM(CASE 
-                  WHEN R.allerretour = 1 THEN R.distance * 2 
-                  ELSE R.distance 
-                END), 0) AS distanceTotale
-      FROM 
-          USR_Fiche U
-      LEFT JOIN 
-          Reservation R ON U.idFiche = R.idTaxi AND DATE(R.HeureConsult) = '${dateHeureConsult.toISOString().split('T')[0]}'
-      LEFT JOIN 
-          Disponibilite D ON U.idFiche = D.idTaxi AND D.idJour = ${idJourDB}
-      WHERE 
-          U.role = 3
-          AND (
-            '${heureConsultation}' BETWEEN D.HeureDebutMatin AND D.HeureFinMatin 
-            OR '${heureConsultation}' BETWEEN D.HeureDebutApresMidi AND D.HeureFinApresMidi)
-      GROUP BY 
-          U.idFiche
-      ORDER BY 
-          distanceTotale ASC, 
-          COUNT(R.idTaxi) ASC
-      LIMIT 1;
-    `);
+    `;
+
+    // Format dates for SQL query
+    const dateHeureConsult = moment(HeureConsult).format('YYYY-MM-DD');
+    const heureDepartFormatted = moment(HeureDepart).format('YYYY-MM-DD HH:mm:ss');
+    const heureFin = moment(HeureDepart).add(DureeTrajet, 'hours').format('YYYY-MM-DD HH:mm:ss');
+    // Exécution de la requête SQL avec passage des paramètres
+    const replacements = [
+      dateHeureConsult,
+      idJourDB,
+      heureDepartFormatted,
+      heureDepartFormatted,
+      heureDepartFormatted,
+      DureeTrajet,
+      heureDepartFormatted,
+      heureConsultFormat,
+      heureConsultFormat
+    ];
+    const [resultats] = await sequelize.query(sqlQuery, {
+      replacements: replacements,
+      type: sequelize.QueryTypes.SELECT
+    });
     
     
     let idTaxi;
     let Etat;
-    if (resultats.length === 0) {
+    if (!Array.isArray(resultats) || resultats.length === 0) {
       idTaxi = 0;
       Etat = __ETAT_ENATTENTE__;
       // Réservation créée mais en attente de taxi
@@ -1236,6 +1261,58 @@ app.post('/api/messages', authenticateToken, async (req, res) => {
   }
 }
 );
+
+app.post('/api/users/createtaxi', authenticateToken, async (req, res) => {
+  if (req.user.role !== __ROLE_SUPERVISEUR__) {
+      return res.status(403).json({ error: "Action non autorisée" });
+  }
+
+  try {
+    const { email } = req.body;
+    const chaineAlphanumeriqueAleatoire = genererChaineAlphanumeriqueAleatoire(16);
+    const user = await User.create({ 
+      email: email, 
+      USR_KEY: chaineAlphanumeriqueAleatoire });
+    const fiche = await FicheUser.create({ 
+      idFiche: user.id, 
+      role: __ROLE_TAXI__, 
+      mailcontact: email 
+    });
+    const lieninscription = process.env.URL + "/InscriptionTaxi/" + chaineAlphanumeriqueAleatoire;
+    const objet = "Création de votre compte taxi"
+    const message = `Votre compte taxi a été créé avec succès. nous vous invitons a aller completer votre inscription sur le lien suivant : ${lieninscription}`;
+    const replacements = {
+      objet,
+      message
+    };
+    await sendEmail(email,replacements)
+    res.status(201).json({ message: "Taxi créé avec succès" });
+
+  } catch (error) {
+    console.error('Erreur lors de la création du taxi :', error);
+    res.status(500).json({ error: "Erreur interne du serveur" });
+  }
+}); 
+
+app.post('/api/users/completetaxi', upload.fields([
+  { name: 'controletechnique', maxCount: 1 },
+  { name: 'KBIS', maxCount: 1 },
+  { name: 'attestassurance', maxCount: 1 },
+  { name: 'autostationnement', maxCount: 1 },
+  { name: 'atteststagecontinue', maxCount: 1 },
+  { name: 'attestmedicale', maxCount: 1 },
+  { name: 'cartepro', maxCount: 1 }
+]),async (req,res) => {
+  try{
+    console.log('Données reçues:', req.body);
+    console.log('Fichiers reçus:', req.files);
+  }catch (error) {
+    console.error('Erreur lors de la création du taxi :', error);
+    res.status(500).json({ error: "Erreur interne du serveur" });
+  }
+}
+);
+
 
 
 const PORT = process.env.PORT || 3000;
