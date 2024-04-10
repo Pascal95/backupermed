@@ -9,33 +9,34 @@ const path = require('path');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
 const { sequelize } = require('./models');
-const fs = require('fs');
 require('dotenv').config();
 const moment = require('moment');
+const fs = require('fs-extra');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-      let folder = "";
-      switch (file.fieldname) {
-          case 'permis':
-              folder = "uploads/permis";
-              break;
-          case 'carteGrise':
-              folder = "uploads/cartes_grises";
-              break;
-          case 'BonTransport':
-            folder = "uploads/BonTransport"
-          // ajoutez d'autres cas au besoin
-      }
-      cb(null, folder);
+  destination: async function (req, file, cb) {
+      const key = req.body.key || "default"; // Utilise une clé par défaut si non spécifiée
+      const uploadPath = path.join(__dirname, 'uploads/' +key); // Construit le chemin du dossier avec la clé
+
+      // Assure la création du dossier s'il n'existe pas
+      await fs.ensureDir(uploadPath);
+      
+      cb(null, uploadPath);
   },
   filename: function (req, file, cb) {
-      // Vous pouvez également personnaliser le nom du fichier ici
       const fileExt = path.extname(file.originalname);
-      cb(null, file.fieldname + '-' + Date.now() + fileExt);
+      const filename = file.fieldname + '-' + Date.now() + fileExt;
+      cb(null, filename);
   }
 });
+
+// Middleware Multer pour gérer l'upload des fichiers
+const upload = multer({ storage: storage });
+// const storage = multer.memoryStorage(); // ou multer.diskStorage({ destination: 'chemin/vers/dossier/des/uploads', })
+
+
 
 //CONSTANTE
 const __ROLE_SUPERVISEUR__ = 1
@@ -50,7 +51,6 @@ const __ETAT_ANNULE__ = 3
 
 
 
-const upload = multer({ storage: storage });
 
 const app = express();
 app.use(cors());
@@ -1301,14 +1301,100 @@ app.post('/api/users/completetaxi', upload.fields([
   { name: 'autostationnement', maxCount: 1 },
   { name: 'atteststagecontinue', maxCount: 1 },
   { name: 'attestmedicale', maxCount: 1 },
-  { name: 'cartepro', maxCount: 1 }
+  { name: 'cartepro', maxCount: 1 },
+  { name: 'permis', maxCount: 1 }
 ]),async (req,res) => {
   try{
-    console.log('Données reçues:', req.body);
-    console.log('Fichiers reçus:', req.files);
+    const { key, etape1, etape2, etape3, etape5, etape6 } = req.body;
+    console.log(etape6)
+    const user = await User.findOne({where: {USR_KEY: key}});
+    if (!user) return res.status(404).json({ error: "Utilisateur non trouvé" });
+    
+
+    const hashedPassword = await bcrypt.hash(etape1.password, 10); 
+    await user.update({ password: hashedPassword });
+
+
+    const ficheUtilisateur = await FicheUser.findOne({where: {idCNX: user.id}});
+    if (!ficheUtilisateur) return res.status(404).json({ error: "Fiche utilisateur non trouvée" });
+    
+
+    await ficheUtilisateur.update({
+      nom: etape2.nom,
+      prenom: etape2.prenom,
+      adresse: etape2.adresse,
+      ville: etape2.ville,
+      codepostal: etape2.codepostal,
+      telephone: etape2.telephone,
+      IdStripe: etape6.paymentMethodId
+    });
+
+    
+    const infopermis = await FichePermis.create({
+      idFiche: ficheUtilisateur.idFiche,
+      numPermis: etape5.numPermis,
+      dateDel: etape5.dateDel,
+      dateExpi: etape5.dateExpi,
+    });
+
+    const infovehicule = await FicheVehicule.create({
+      idFiche: ficheUtilisateur.idFiche,
+      Marque: etape3.marquevehicule,
+      Modele: etape3.modele,
+      couleur: etape3.couleur,
+      Annee: etape3.annee,
+      numImmatriculation: etape3.immatriculation
+    });
+
+    // Création d'un client Stripe
+    try{
+      const customer = await stripe.customers.create({
+        email: ficheUtilisateur.mailcontact, // Utilisez l'email de votre utilisateur
+        payment_method: etape6.paymentMethodId, // ID de la méthode de paiement
+      });
+  
+      // Associer la méthode de paiement au client et définir comme méthode par défaut
+      await stripe.paymentMethods.attach(
+        etape6.paymentMethodId, // ID de la méthode de paiement
+        {customer: customer.id}
+      );
+  
+      await stripe.customers.update(
+        customer.id,
+        {
+          invoice_settings: {
+            default_payment_method: etape6.paymentMethodId,
+          },
+        }
+      );
+  
+      const subscription = await stripe.subscriptions.create({
+        customer: customer.id,
+        items: [{ price: 'price_1P3y8hESO4xwzKUzxzuQarWb' }], // Remplacez 'price_id' par l'ID de votre plan
+        expand: ['latest_invoice.payment_intent'],
+      });
+  
+      const objet = "Confirmation de votre compte taxi"
+      const message = `Votre compte taxi a été complété avec succès. Nous vous ferons parvenir un email de confirmation dès que votre compte sera validé.`;
+      const replacements = {
+        objet,
+        message
+      };
+      await sendEmail(ficheUtilisateur.mailcontact,replacements)
+  
+  
+  
+      res.status(201).json({ message: "Taxi complété avec succès" });
+    }catch (stripeError){
+      console.error('Erreur Stripe lors de la création du taxi:', stripeError);
+      // Gestion spécifique des erreurs Stripe
+      return res.status(500).json({ error: "Erreur de paiement Stripe" });
+    }
+
   }catch (error) {
-    console.error('Erreur lors de la création du taxi :', error);
-    res.status(500).json({ error: "Erreur interne du serveur" });
+    console.error('Erreur BDD lors de la création du taxi:', dbError);
+    // Gestion spécifique des erreurs liées aux opérations en BDD
+    return res.status(500).json({ error: "Erreur interne du serveur liée à la BDD" });
   }
 }
 );
@@ -1317,4 +1403,5 @@ app.post('/api/users/completetaxi', upload.fields([
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 

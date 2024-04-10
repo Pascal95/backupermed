@@ -23,7 +23,7 @@ module.exports = (sequelize) => {
         },
         ficPermis:{
             type: DataTypes.STRING,
-            allowNull: false
+            allowNull: true
         },
         idFiche:{
             type: DataTypes.INTEGER,

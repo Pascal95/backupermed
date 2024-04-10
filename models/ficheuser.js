@@ -65,6 +65,10 @@ module.exports = (sequelize) => {
             type: DataTypes.BOOLEAN,
             allowNull: true
         },
+        IdStripe:{
+            type: DataTypes.STRING,
+            allowNull: true
+        },
     }, {
     // Options du modèle
     sequelize, // instance de connexion

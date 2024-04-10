@@ -27,7 +27,7 @@ module.exports = (sequelize) => {
         },
         numSerie:{
             type: DataTypes.STRING,
-            allowNull: false
+            allowNull: true
         },
         ficVehicule:{
             type: DataTypes.STRING,
