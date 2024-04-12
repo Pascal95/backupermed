@@ -53,5 +53,6 @@ module.exports = (sequelize) => {
     timestamps: false // désactive la gestion automatique des timestamps par Sequelize
   });
 
+  
   return User;
 };

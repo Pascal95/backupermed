@@ -62,7 +62,7 @@ module.exports = (sequelize) => {
             allowNull:true
         },
         Valide: {
-            type: DataTypes.BOOLEAN,
+            type: DataTypes.INTEGER,
             allowNull: true
         },
         IdStripe:{
@@ -100,6 +100,8 @@ module.exports = (sequelize) => {
             foreignKey: 'idTaxi',
             as: 'Taxi'
         });
+
+
       };
       
   return FicheUser;

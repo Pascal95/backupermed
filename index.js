@@ -13,6 +13,7 @@ require('dotenv').config();
 const moment = require('moment');
 const fs = require('fs-extra');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const archiver = require('archiver');
 
 
 const storage = multer.diskStorage({
@@ -397,29 +398,42 @@ app.get('/api/users/taxinonvalide', authenticateToken, async (req, res) => {
     let condition = {};
     // Si l'utilisateur est un taxi, limitez la recherche à son propre ID
     if (req.user.role === __ROLE_TAXI__) { // Remplacez __ROLE_TAXI__ par la valeur correcte pour le rôle taxi
-      condition.idFiche = req.user.idFiche;
+      condition = "USR_FICHE.idFiche = " + req.user.idFiche;
     } else if (req.user.role === __ROLE_SUPERVISEUR__) { // Remplacez __ROLE_SUPERVISEUR__ par la valeur correcte pour le rôle superviseur
       // Si l'utilisateur est un superviseur, recherchez tous les utilisateurs non validés
-      condition.Valide = false;
+      condition = "USR_Fiche.Valide = 2";
     }
 
-    const result = await FicheUser.findAll({
-      where: condition,
-      include: [
-          { 
-              model: FichePermis, 
-              as: 'permis',
-              attributes: ['idPermis','numPermis', 'dateExpi', 'dateDel', 'ficPermis'],
-              required: true
-          },
-          {
-              model: FicheVehicule,
-              as: 'vehicule',
-              attributes: ['idVehicule','Marque', 'Modele', 'Annee', 'numImmatriculation', 'numSerie', 'ficVehicule'],
-              required: true
-          },
-      ],
-      attributes: ['idFiche','nom', 'prenom', 'adresse', 'ville', 'codepostal', 'mailcontact', 'telephone']
+    const result = await sequelize.query(`
+      SELECT 
+        USR_Fiche.idFiche, 
+        USR_Fiche.nom, 
+        USR_Fiche.prenom, 
+        USR_Fiche.adresse, 
+        USR_Fiche.ville, 
+        USR_Fiche.codepostal, 
+        USR_Fiche.mailcontact, 
+        USR_Fiche.telephone, 
+        PermisTaxi.idPermis, 
+        PermisTaxi.numPermis, 
+        PermisTaxi.dateExpi, 
+        PermisTaxi.dateDel, 
+        PermisTaxi.ficPermis, 
+        Vehicule.idVehicule, 
+        Vehicule.Marque, 
+        Vehicule.Modele, 
+        Vehicule.Annee, 
+        Vehicule.numImmatriculation, 
+        Vehicule.numSerie, 
+        Vehicule.ficVehicule,
+        CNX_Utilisateur.USR_KEY
+      FROM USR_Fiche 
+      INNER JOIN PermisTaxi ON USR_Fiche.idFiche = PermisTaxi.idFiche
+      INNER JOIN Vehicule ON USR_Fiche.idFiche = Vehicule.idFiche
+      INNER JOIN CNX_Utilisateur ON USR_Fiche.idCNX = CNX_Utilisateur.id
+      WHERE 
+        `+ condition, {
+      type: sequelize.QueryTypes.SELECT
     });
 
     res.json(result);
@@ -435,7 +449,7 @@ app.post('/api/users/valideuser', authenticateToken, async (req,res) =>{
   try{
     const {idFiche} = req.body;
     const user = await FicheUser.findByPk(idFiche);
-    await user.update({Valide: true});
+    await user.update({Valide: 3});
     const objet = "Validation de votre compte"
     const message = "Votre compte a été validé avec succès"
     const nom = user.prenom + " " + user.nom
@@ -460,7 +474,6 @@ app.post('/api/users/refuseuser', authenticateToken, async (req,res) =>{
   try{
     const {idFiche, message} = req.body;
     const user = await FicheUser.findByPk(idFiche);
-    await user.update({Valide: false});
     const objet = "Validation de votre compte"
     const nom = user.prenom + " " + user.nom
     const replacements = {
@@ -1249,9 +1262,9 @@ app.post('/api/messages', authenticateToken, async (req, res) => {
 
       // Créer un message avec les données reçues
       const message = await Message.create({
-          idFiche: idFiche,
-          Objet: objet,
-          Message: contenu
+        idFiche: idFiche,
+        Objet: objet,
+        Message: contenu
       });
 
       res.status(201).json({ message: "Message envoyé avec succès", idMessage: message.id });
@@ -1276,7 +1289,8 @@ app.post('/api/users/createtaxi', authenticateToken, async (req, res) => {
     const fiche = await FicheUser.create({ 
       idFiche: user.id, 
       role: __ROLE_TAXI__, 
-      mailcontact: email 
+      mailcontact: email,
+      Valide: 1 
     });
     const lieninscription = process.env.URL + "/InscriptionTaxi/" + chaineAlphanumeriqueAleatoire;
     const objet = "Création de votre compte taxi"
@@ -1326,6 +1340,7 @@ app.post('/api/users/completetaxi', upload.fields([
       ville: etape2.ville,
       codepostal: etape2.codepostal,
       telephone: etape2.telephone,
+      Valide: 2,
       IdStripe: etape6.paymentMethodId
     });
 
@@ -1375,14 +1390,19 @@ app.post('/api/users/completetaxi', upload.fields([
       });
   
       const objet = "Confirmation de votre compte taxi"
-      const message = `Votre compte taxi a été complété avec succès. Nous vous ferons parvenir un email de confirmation dès que votre compte sera validé.`;
+      const contenu = `Votre compte taxi a été complété avec succès. Nous vous ferons parvenir un email de confirmation dès que votre compte sera validé.`;
       const replacements = {
         objet,
-        message
+        contenu
       };
       await sendEmail(ficheUtilisateur.mailcontact,replacements)
   
-  
+      const message = await Message.create({
+        idFiche: ficheUtilisateur.idFiche,
+        Objet: objet,
+        Message: contenu
+      });
+
   
       res.status(201).json({ message: "Taxi complété avec succès" });
     }catch (stripeError){
@@ -1394,10 +1414,41 @@ app.post('/api/users/completetaxi', upload.fields([
   }catch (error) {
     console.error('Erreur BDD lors de la création du taxi:', dbError);
     // Gestion spécifique des erreurs liées aux opérations en BDD
-    return res.status(500).json({ error: "Erreur interne du serveur liée à la BDD" });
+    return res.status(500).json({ error: "Une erreur est survenu lors de votre enregistrement n'hesitez pas a contacter le support" });
   }
 }
 );
+
+app.get('/api/users/doc/:key', authenticateToken, async (req, res) => {
+
+  const { key } = req.params;
+  if (req.user.role !== __ROLE_SUPERVISEUR__) {
+    return res.status(403).json({ error: "Action non autorisée" });
+  }
+  // Assurez-vous que le dossier existe
+  const directoryPath = path.join(__dirname, 'uploads', key);
+  if (!fs.existsSync(directoryPath)) {
+    return res.status(404).send('Dossier non trouvé.');
+  }
+
+  // Créez un stream pour écrire le fichier ZIP
+  const zipFileName = `${key}.zip`;
+  res.attachment(zipFileName);
+  const archive = archiver('zip', {
+    zlib: { level: 9 } // Niveau de compression
+  });
+  archive.on('error', function(err) {
+    res.status(500).send({error: err.message});
+  });
+  // Pipe les données de l'archive dans la réponse
+  archive.pipe(res);
+
+  // Ajoutez le dossier à l'archive
+  archive.directory(directoryPath, false);
+
+  // Finalisez l'archive (cela indique que nous avons fini d'ajouter des fichiers)
+  archive.finalize();
+});
 
 
 
