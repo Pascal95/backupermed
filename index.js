@@ -27,7 +27,7 @@ const storage = multer.diskStorage({
       cb(null, uploadPath);
   },
   filename: function (req, file, cb) {
-      const fileExt = path.extname(file.originalname);
+      const fileExt = path.extname(file.originalname);w
       const filename = file.fieldname + '-' + Date.now() + fileExt;
       cb(null, filename);
   }
@@ -418,14 +418,13 @@ app.get('/api/users/taxinonvalide', authenticateToken, async (req, res) => {
         PermisTaxi.numPermis, 
         PermisTaxi.dateExpi, 
         PermisTaxi.dateDel, 
-        PermisTaxi.ficPermis, 
         Vehicule.idVehicule, 
         Vehicule.Marque, 
         Vehicule.Modele, 
         Vehicule.Annee, 
         Vehicule.numImmatriculation, 
         Vehicule.numSerie, 
-        Vehicule.ficVehicule,
+        Vehicule.pecPMR,
         CNX_Utilisateur.USR_KEY
       FROM USR_Fiche 
       INNER JOIN PermisTaxi ON USR_Fiche.idFiche = PermisTaxi.idFiche
@@ -629,117 +628,38 @@ app.post('/api/users/reset-password', async (req, res) => {
 
 // Endpoint pour creer une reservation
 app.post('/api/reservation/newreservation', authenticateToken, async (req,res) => {
-
+  
   try{
-    const { AdresseDepart, AdresseArrive, Distance, DureeTrajet, HeureConsult, HeureDepart, AllerRetour, DureeConsult, idFicheUser } = req.body;
+    const { AdresseDepart, AdresseArrive, Distance, DureeTrajet, HeureConsult, HeureDepart, AllerRetour, DureeConsult, idFicheUser, pecPMR } = req.body;
     const idClient = idFicheUser;
     const user = await FicheUser.findByPk(idClient);
-
+    let idTaxi = 0;
+    let Etat = __ETAT_ENATTENTE__;
     if (!user) {
       return res.status(404).json({ errorCode: "USER_NOT_FOUND" });
     }
 
-    const deductionTransport = AllerRetour ? 2 : 1;
-    if (user.TransportDispo < deductionTransport) {
-      return res.status(400).json({ errorCode: "NOT_ENOUGH_TRANSPORTS" });
-    }
-
-    const heureConsultFormat = moment(HeureConsult).format("HH:mm:ss");
-    const jourSemaine = moment(HeureConsult).day();
-    const idJourDB = jourSemaine === 0 ? 7 : jourSemaine;
-
-    const sqlQuery = `
-    SELECT U.idFiche AS idTaxi,
-    COALESCE(SUM(CASE WHEN R.allerretour = 1 THEN R.distance * 2 ELSE R.distance END), 0) AS distanceTotale
-FROM USR_Fiche U
-LEFT JOIN Reservation R ON U.idFiche = R.idTaxi AND DATE(R.HeureDepart) = DATE(?)
-INNER JOIN Disponibilite D ON U.idFiche = D.idTaxi AND D.idJour = ?
-WHERE U.role = 3
-    AND NOT EXISTS (
-        SELECT 1
-        FROM Reservation R2
-        WHERE R2.idTaxi = U.idFiche 
-        AND (
-            (R2.HeureDepart <= ? AND DATE_ADD(R2.HeureDepart, INTERVAL R2.DureeTrajet HOUR) > ?)
-            OR
-            (R2.HeureDepart < DATE_ADD(?, INTERVAL ? HOUR) AND DATE_ADD(R2.HeureDepart, INTERVAL R2.DureeTrajet HOUR) >= ?)
-        )
-    )
-    AND (? BETWEEN D.HeureDebutMatin AND D.HeureFinMatin OR ? BETWEEN D.HeureDebutApresMidi AND D.HeureFinApresMidi)
-GROUP BY U.idFiche
-HAVING distanceTotale = MIN(distanceTotale)
-ORDER BY distanceTotale
-LIMIT 1;
-
-    `;
-
-    // Format dates for SQL query
-    const dateHeureConsult = moment(HeureConsult).format('YYYY-MM-DD');
-    const heureDepartFormatted = moment(HeureDepart).format('YYYY-MM-DD HH:mm:ss');
-    const heureFin = moment(HeureDepart).add(DureeTrajet, 'hours').format('YYYY-MM-DD HH:mm:ss');
-    // Exécution de la requête SQL avec passage des paramètres
-    const replacements = [
-      dateHeureConsult,
-      idJourDB,
-      heureDepartFormatted,
-      heureDepartFormatted,
-      heureDepartFormatted,
-      DureeTrajet,
-      heureDepartFormatted,
-      heureConsultFormat,
-      heureConsultFormat
-    ];
-    const [resultats] = await sequelize.query(sqlQuery, {
-      replacements: replacements,
-      type: sequelize.QueryTypes.SELECT
+    const newReservation = await Reservation.create({
+      idClient, 
+      idTaxi,
+      AdresseDepart, 
+      AdresseArrive, 
+      Distance, 
+      DureeTrajet, 
+      HeureConsult, 
+      HeureDepart, 
+      AllerRetour, 
+      pecPMR,
+      DureeConsult,
+      Etat
     });
-    
-    
-    let idTaxi;
-    let Etat;
-    if (!Array.isArray(resultats) || resultats.length === 0) {
-      idTaxi = 0;
-      Etat = __ETAT_ENATTENTE__;
-      // Réservation créée mais en attente de taxi
-      const newReservation = await Reservation.create({
-        idClient, 
-        idTaxi, 
-        AdresseDepart, 
-        AdresseArrive, 
-        Distance, 
-        DureeTrajet, 
-        HeureConsult, 
-        HeureDepart, 
-        AllerRetour, 
-        DureeConsult,
-        Etat
-      });
-      return res.status(400).json({ idReservation: newReservation.idReservation, Etat: Etat, errorCode: "TAXI_PENDING" });    
-    } else {
-      idTaxi = resultats[0].idTaxi;
-      Etat = __ETAT_CONFIRME__;
-      // Décrémenter TransportDispo pour l'utilisateur
-      await FicheUser.update({ TransportDispo: user.TransportDispo - deductionTransport }, { where: { idFiche: idClient } });
-      const newReservation = await Reservation.create({
-        idClient, 
-        idTaxi, 
-        AdresseDepart, 
-        AdresseArrive, 
-        Distance, 
-        DureeTrajet, 
-        HeureConsult, 
-        HeureDepart, 
-        AllerRetour, 
-        DureeConsult,
-        Etat
-      });
-      return res.status(201).json({ idReservation: newReservation.idReservation, Etat: Etat });
-    }
+    return res.status(201).json({ idReservation: newReservation.idReservation, Etat: Etat });   
   } catch (error){
     console.error(error);
     res.status(500).json({ errorCode: "SERVER_ERROR" });
   }
-})
+
+});
 
 app.put('/api/reservation/annulerreservation', authenticateToken, async (req,res) => {
   try{
@@ -1358,7 +1278,8 @@ app.post('/api/users/completetaxi', upload.fields([
       Modele: etape3.modele,
       couleur: etape3.couleur,
       Annee: etape3.annee,
-      numImmatriculation: etape3.immatriculation
+      numImmatriculation: etape3.immatriculation,
+      numSerie: etape3.numSerie
     });
 
     // Création d'un client Stripe

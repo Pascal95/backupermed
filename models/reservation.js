@@ -49,6 +49,10 @@ module.exports = (sequelize) => {
             type: DataTypes.TIME,
             allowNull: true
         },
+        pecPMR:{
+            type: DataTypes.INTEGER,
+            allowNull: false
+        },
         Etat:{
             type: DataTypes.INTEGER,
             allowNull: false

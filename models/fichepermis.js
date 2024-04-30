@@ -21,10 +21,6 @@ module.exports = (sequelize) => {
             type: DataTypes.DATE,
             allowNull: false
         },
-        ficPermis:{
-            type: DataTypes.STRING,
-            allowNull: true
-        },
         idFiche:{
             type: DataTypes.INTEGER,
             allowNull: false

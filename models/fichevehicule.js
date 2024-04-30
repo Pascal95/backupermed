@@ -29,9 +29,9 @@ module.exports = (sequelize) => {
             type: DataTypes.STRING,
             allowNull: true
         },
-        ficVehicule:{
+        pecPMR:{
             type: DataTypes.STRING,
-            allowNull: true
+            allowNull: false
         },
         idFiche:{
             type: DataTypes.INTEGER,
