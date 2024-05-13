@@ -16,25 +16,67 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const archiver = require('archiver');
 
 
+// Configuration de storage Multer
 const storage = multer.diskStorage({
-  destination: async function (req, file, cb) {
-      const key = req.body.key || "default"; // Utilise une clé par défaut si non spécifiée
-      const uploadPath = path.join(__dirname, 'uploads/' +key); // Construit le chemin du dossier avec la clé
+  destination: function (req, file, cb) {
+      // Détermination du dossier de base en fonction de la présence d'une clé ou du type de fichier
+      let baseFolder = 'uploads';
+      let specificFolder = req.body.key || 'default';  // Utilisation de 'default' si aucune clé n'est spécifiée
+
+      // Logique spéciale pour 'BonTransport'
+      if (file.fieldname === 'BonTransport' && !req.body.key) {
+          specificFolder = 'BonTransport';
+      }
+
+      const uploadPath = path.join(__dirname, baseFolder, specificFolder);
 
       // Assure la création du dossier s'il n'existe pas
-      await fs.ensureDir(uploadPath);
-      
-      cb(null, uploadPath);
+      fs.ensureDir(uploadPath)
+          .then(() => cb(null, uploadPath))
+          .catch(err => cb(err));
   },
   filename: function (req, file, cb) {
-      const fileExt = path.extname(file.originalname);w
-      const filename = file.fieldname + '-' + Date.now() + fileExt;
+      const timestamp = Date.now();
+      const fileExt = path.extname(file.originalname);
+      let prefix = 'file';
+
+      // Nom de fichier spécifique pour 'BonTransport'
+      if (file.fieldname === 'BonTransport') {
+          const idReservation = req.body.idReservation; // Assurez-vous que cet ID est passé dans le corps de la requête
+          prefix = `bon_transport_${timestamp}_${idReservation}`;
+      } else {
+          prefix = `${file.fieldname}-${timestamp}`;
+      }
+
+      const filename = `${prefix}${fileExt}`;
       cb(null, filename);
   }
 });
 
+
+const fileFilter = (req, file, cb) => {
+  // Accepter uniquement certains types de fichiers, y compris les PDF
+  const allowedTypes = /jpeg|jpg|png|gif|pdf/;
+  const isAccepted = allowedTypes.test(file.mimetype) || file.mimetype === 'application/pdf';
+
+  if (isAccepted) {
+      cb(null, true);
+  } else {
+      cb(new Error('Unallowed file type'), false);
+  }
+};
+
+
+const limits = {
+  fileSize: 1024 * 1024 * 5 // 5 MB limit
+};
+
 // Middleware Multer pour gérer l'upload des fichiers
-const upload = multer({ storage: storage });
+const upload = multer({
+  storage: storage,
+  fileFilter: fileFilter,
+  limits: limits
+});
 // const storage = multer.memoryStorage(); // ou multer.diskStorage({ destination: 'chemin/vers/dossier/des/uploads', })
 
 
@@ -639,6 +681,9 @@ app.post('/api/reservation/newreservation', authenticateToken, async (req,res) =
       return res.status(404).json({ errorCode: "USER_NOT_FOUND" });
     }
 
+    // Ajout de 2 heures à HeureConsult et HeureDepart
+    const adjustedHeureConsult = moment(HeureConsult).add(2, 'hours').toISOString();
+    const adjustedHeureDepart = moment(HeureDepart).add(2, 'hours').toISOString();
     const newReservation = await Reservation.create({
       idClient, 
       idTaxi,
@@ -646,8 +691,8 @@ app.post('/api/reservation/newreservation', authenticateToken, async (req,res) =
       AdresseArrive, 
       Distance, 
       DureeTrajet, 
-      HeureConsult, 
-      HeureDepart, 
+      HeureConsult: adjustedHeureConsult, // Utilisez la valeur ajustée ici
+      HeureDepart: adjustedHeureDepart, // Utilisez la valeur ajustée ici
       AllerRetour, 
       pecPMR,
       DureeConsult,
@@ -908,14 +953,111 @@ app.get('/api/bon', authenticateToken, async (req, res) => {
   }
 )
 
+app.get('/api/reservation/lastresa', authenticateToken, async (req,res) =>{
+  console.log(req.user)
+  const maintenant = new Date();
+  maintenant.setHours(0, 0, 0, 0); 
+  switch (req.user.role) {
+    case __ROLE_SUPERVISEUR__:
+      try{
+        const reservations = await Reservation.findAll({
+          where: {
+            HeureDepart: {
+              [Op.lt]: maintenant
+            }
+          },
+          include: [{
+            model: FicheUser,
+            as: 'Taxi', // Assurez-vous que cette association est correctement définie dans vos modèles
+            attributes: ['nom', 'prenom']
+          }]
+        });
+        // Préparer les données pour inclure les informations du taxi dans la réponse
+        const reservationsWithTaxiInfo = reservations.map(reservation => ({
+          ...reservation.toJSON(),
+          TaxiNom: reservation.Taxi?.nom,
+          TaxiPrenom: reservation.Taxi?.prenom,
+        }));
+        res.status(201).json({reservations: reservationsWithTaxiInfo});
+      } catch(error){
+        res.status(400).json({ error: error.message });
+      }
+      break;
+
+    case __ROLE_TAXI__:
+      try{
+        const reservations = await Reservation.findAll({
+          where:{
+            idTaxi:req.user.idFiche,
+            HeureDepart: {
+              [Op.lt]:maintenant
+            }
+          }
+        })
+        res.status(201).json({reservations});
+      } catch(error){
+        res.status(400).json({ error: error.message });
+      }
+      break;
+      case __ROLE_UTILISATEUR__:
+        try {
+          // Assurez-vous d'inclure le modèle FicheUser pour les taxis et un autre pour les clients (utilisateurs rattachés)
+          const reservations = await Reservation.findAll({
+            where: {
+              [Op.or]: [
+                { idClient: req.user.idFiche },
+                { '$Client.idFicheMere$': req.user.idFiche }
+              ],
+              HeureDepart: {
+                [Op.lt]: maintenant
+              }
+            },
+            include: [
+              {
+                model: FicheUser,
+                as: 'Taxi',
+                attributes: ['nom', 'prenom']
+              },
+              {
+                model: FicheUser,
+                as: 'Client', // Supposons que vous ayez cette association définie pour pointer vers l'utilisateur qui a fait la réservation
+                attributes: ['nom', 'prenom']
+              }
+            ]
+          });
+      
+          // Transformer les données pour inclure les informations nécessaires
+          const reservationsTransformed = reservations.map(reservation => ({
+            ...reservation.toJSON(),
+            TaxiNom: reservation.Taxi?.nom,
+            TaxiPrenom: reservation.Taxi?.prenom,
+            ClientNom: reservation.Client?.nom, // Nom du client (utilisateur rattaché)
+            ClientPrenom: reservation.Client?.prenom, // Prénom du client (utilisateur rattaché)
+          }));
+      
+          res.status(201).json({ reservations: reservationsTransformed });
+        } catch (error) {
+          res.status(400).json({ error: error.message });
+        }
+        break;
+
+    default:
+      res.status(400).json({ error: "Vous ne possédez pas les droits necessaire" });
+      break;
+
+    }
+})
+
+
 
 
 app.get('/api/reservation/nextresa', authenticateToken, async (req,res) =>{
   console.log(req.user)
+  const maintenant = new Date();
+  maintenant.setHours(0, 0, 0, 0); 
   switch (req.user.role) {
     case __ROLE_SUPERVISEUR__:
       try{
-        const maintenant = new Date();
         const reservations = await Reservation.findAll({
           where: {
             HeureDepart: {
@@ -942,7 +1084,6 @@ app.get('/api/reservation/nextresa', authenticateToken, async (req,res) =>{
 
     case __ROLE_TAXI__:
       try{
-        const maintenant = new Date()
         const reservations = await Reservation.findAll({
           where:{
             idTaxi:req.user.idFiche,
@@ -958,7 +1099,6 @@ app.get('/api/reservation/nextresa', authenticateToken, async (req,res) =>{
       break;
       case __ROLE_UTILISATEUR__:
         try {
-          const maintenant = new Date();
           // Assurez-vous d'inclure le modèle FicheUser pour les taxis et un autre pour les clients (utilisateurs rattachés)
           const reservations = await Reservation.findAll({
             where: {
@@ -1207,7 +1347,7 @@ app.post('/api/users/createtaxi', authenticateToken, async (req, res) => {
       email: email, 
       USR_KEY: chaineAlphanumeriqueAleatoire });
     const fiche = await FicheUser.create({ 
-      idFiche: user.id, 
+      idCNX: user.id, 
       role: __ROLE_TAXI__, 
       mailcontact: email,
       Valide: 1 
@@ -1219,6 +1359,7 @@ app.post('/api/users/createtaxi', authenticateToken, async (req, res) => {
       objet,
       message
     };
+    
     await sendEmail(email,replacements)
     res.status(201).json({ message: "Taxi créé avec succès" });
 
@@ -1279,7 +1420,8 @@ app.post('/api/users/completetaxi', upload.fields([
       couleur: etape3.couleur,
       Annee: etape3.annee,
       numImmatriculation: etape3.immatriculation,
-      numSerie: etape3.numSerie
+      numSerie: etape3.numSerie,
+      pecPMR: etape3.pecPMR
     });
 
     // Création d'un client Stripe
@@ -1314,8 +1456,9 @@ app.post('/api/users/completetaxi', upload.fields([
       const contenu = `Votre compte taxi a été complété avec succès. Nous vous ferons parvenir un email de confirmation dès que votre compte sera validé.`;
       const replacements = {
         objet,
-        contenu
-      };
+        message: contenu,
+        nom: etape2.nom,
+    };
       await sendEmail(ficheUtilisateur.mailcontact,replacements)
   
       const message = await Message.create({
@@ -1332,8 +1475,8 @@ app.post('/api/users/completetaxi', upload.fields([
       return res.status(500).json({ error: "Erreur de paiement Stripe" });
     }
 
-  }catch (error) {
-    console.error('Erreur BDD lors de la création du taxi:', dbError);
+  }catch (dberror) {
+    console.error('Erreur BDD lors de la création du taxi:', dberror);
     // Gestion spécifique des erreurs liées aux opérations en BDD
     return res.status(500).json({ error: "Une erreur est survenu lors de votre enregistrement n'hesitez pas a contacter le support" });
   }
@@ -1371,6 +1514,54 @@ app.get('/api/users/doc/:key', authenticateToken, async (req, res) => {
   archive.finalize();
 });
 
+
+app.get('/api/reservation/download/:idReservation', async (req, res) => {
+  const { idReservation } = req.params;
+
+  try {
+    const reservation = await Reservation.findOne({ where: { idReservation: idReservation } });
+
+    if (!reservation || !reservation.bonTransportPath) {
+      return res.status(404).send('File not found.');
+    }
+
+    // Construire le chemin complet vers le fichier
+    const filePath = path.join(__dirname, 'uploads', 'BonTransport', reservation.bonTransportPath);
+
+    // Vérifier si le fichier existe réellement sur le disque
+    if (fs.existsSync(filePath)) {
+      // Définir les headers pour le téléchargement
+      res.setHeader('Content-Disposition', 'attachment; filename=' + path.basename(filePath));
+      res.setHeader('Content-Type', 'application/octet-stream');
+
+      // Envoyer le fichier
+      res.sendFile(filePath);
+    } else {
+      res.status(404).send('File not found on server.');
+    }
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.post('/api/reservation/upload', upload.single('BonTransport'),authenticateToken, async (req, res) => {
+  const { idReservation } = req.body;
+  const reservation = await Reservation.findByPk(idReservation);
+
+  if (!reservation) {
+    return res.status(404).json({ error: "Reservation not found" });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({ error: "No file uploaded" });
+  }
+
+  // Enregistrez le chemin du fichier dans la base de données
+  reservation.bonTransportPath = req.file.filename;
+  await reservation.save();
+
+  res.status(200).json({ message: "File uploaded successfully" });
+});
 
 
 const PORT = process.env.PORT || 3000;

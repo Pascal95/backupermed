@@ -56,7 +56,11 @@ module.exports = (sequelize) => {
         Etat:{
             type: DataTypes.INTEGER,
             allowNull: false
-        }
+        },
+        bonTransportPath:{
+            type: DataTypes.STRING,
+            allowNull: true
+        },
     },{
         // Options du modèle
         sequelize, // instance de connexion
