@@ -96,16 +96,8 @@ const __ETAT_ANNULE__ = 3
 
 
 const app = express();
-const corsOptions = {
-  origin: 'https://www.taxis-med.fr', // URL de votre frontend
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-};
-
-app.use(cors(corsOptions));
+app.use(cors());
 app.use(express.json());
-
-app.options('*', cors(corsOptions));
 
 
 
