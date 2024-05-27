@@ -669,9 +669,8 @@ app.post('/api/users/reset-password', async (req, res) => {
 
 
 // Endpoint pour creer une reservation
-app.post('/api/reservation/newreservation', authenticateToken, async (req,res) => {
-  
-  try{
+app.post('/api/reservation/newreservation', authenticateToken, async (req, res) => {
+  try {
     const { AdresseDepart, AdresseArrive, Distance, DureeTrajet, HeureConsult, HeureDepart, AllerRetour, DureeConsult, idFicheUser, pecPMR } = req.body;
     const idClient = idFicheUser;
     const user = await FicheUser.findByPk(idClient);
@@ -681,29 +680,58 @@ app.post('/api/reservation/newreservation', authenticateToken, async (req,res) =
       return res.status(404).json({ errorCode: "USER_NOT_FOUND" });
     }
 
-    // Ajout de 2 heures à HeureConsult et HeureDepart
+    // Ajout de 2 heures à HeureConsult et HeureDepart pour le fuseau horaire
     const adjustedHeureConsult = moment(HeureConsult).add(2, 'hours').toISOString();
     const adjustedHeureDepart = moment(HeureDepart).add(2, 'hours').toISOString();
+
+    // Création de la réservation initiale
     const newReservation = await Reservation.create({
-      idClient, 
+      idClient,
       idTaxi,
-      AdresseDepart, 
-      AdresseArrive, 
-      Distance, 
-      DureeTrajet, 
-      HeureConsult: adjustedHeureConsult, // Utilisez la valeur ajustée ici
-      HeureDepart: adjustedHeureDepart, // Utilisez la valeur ajustée ici
-      AllerRetour, 
+      AdresseDepart,
+      AdresseArrive,
+      Distance,
+      DureeTrajet,
+      HeureConsult: adjustedHeureConsult,
+      HeureDepart: adjustedHeureDepart,
+      AllerRetour,
       pecPMR,
       DureeConsult,
       Etat
     });
-    return res.status(201).json({ idReservation: newReservation.idReservation, Etat: Etat });   
-  } catch (error){
+
+    // Si AllerRetour = 1, créer une réservation pour le retour
+    if (AllerRetour === 1) {
+      const returnHeureConsult = moment(adjustedHeureConsult).add(DureeConsult, 'hours').toISOString();
+      const returnHeureDepart = returnHeureConsult;
+
+      const returnReservation = await Reservation.create({
+        idClient,
+        idTaxi,
+        AdresseDepart: AdresseArrive, // Inverse des adresses
+        AdresseArrive: AdresseDepart,
+        Distance,
+        DureeTrajet,
+        HeureConsult: returnHeureConsult,
+        HeureDepart: returnHeureDepart,
+        AllerRetour: 0,
+        pecPMR,
+        DureeConsult,
+        Etat
+      });
+
+      return res.status(201).json({
+        idReservationAller: newReservation.idReservation,
+        idReservationRetour: returnReservation.idReservation,
+        Etat: Etat
+      });
+    }
+
+    return res.status(201).json({ idReservation: newReservation.idReservation, Etat: Etat });
+  } catch (error) {
     console.error(error);
     res.status(500).json({ errorCode: "SERVER_ERROR" });
   }
-
 });
 
 app.put('/api/reservation/annulerreservation', authenticateToken, async (req,res) => {
@@ -1564,7 +1592,7 @@ app.post('/api/reservation/upload', upload.single('BonTransport'),authenticateTo
 });
 
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3002;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
 
