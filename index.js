@@ -239,8 +239,8 @@ app.post('/api/users/register', async (req, res) => {
         });
         const dateTime = formatDate(new Date());
         const link = process.env.URL + "/InscriptionEtape/" + dateTime + newUser.id
-        const message = "Vous etes en train de vous inscrire sur le site UperMed pour continuer l'inscription veuillez suivre le lien suivant : " + link
-        const objet = "Inscription UperMed"
+        const message = "Vous etes en train de vous inscrire sur le site HeygoMed pour continuer l'inscription veuillez suivre le lien suivant : " + link
+        const objet = "Inscription Heygo"
         const nom = ""
         const replacements = {
           objet,
