@@ -704,7 +704,7 @@ app.post('/api/reservation/newreservation', authenticateToken, async (req, res) 
 
     // Si AllerRetour = 1, créer une réservation pour le retour
     if (AllerRetour === 1) {
-      const returnHeureConsult = moment(adjustedHeureConsult).add(DureeConsult, 'hours').toISOString();
+      const returnHeureConsult = moment(HeureConsult).add(DureeConsult, 'hours').toISOString();
       const returnHeureDepart = returnHeureConsult;
 
       const returnReservation = await Reservation.create({
