@@ -681,8 +681,8 @@ app.post('/api/reservation/newreservation', authenticateToken, async (req, res) 
     }
 
     // Ajout de 2 heures à HeureConsult et HeureDepart pour le fuseau horaire
-    const adjustedHeureConsult = moment(HeureConsult).add(2, 'hours').toISOString();
-    const adjustedHeureDepart = moment(HeureDepart).add(2, 'hours').toISOString();
+    //const adjustedHeureConsult = moment(HeureConsult).add(2, 'hours').toISOString();
+    //const adjustedHeureDepart = moment(HeureDepart).add(2, 'hours').toISOString();
 
     // Création de la réservation initiale
     const newReservation = await Reservation.create({
