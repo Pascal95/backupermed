@@ -96,8 +96,18 @@ const __ETAT_ANNULE__ = 3
 
 
 const app = express();
-app.use(cors());
+const corsOptions = {
+  origin: 'https://www.taxis-med.fr', // URL de votre frontend
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
+
+app.options('*', cors(corsOptions));
+
+
 
 // Middleware pour authentifier le token
 function authenticateToken(req, res, next) {
