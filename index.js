@@ -239,7 +239,7 @@ app.post('/api/users/register', async (req, res) => {
         });
         const dateTime = formatDate(new Date());
         const link = process.env.URL + "/InscriptionEtape/" + dateTime + newUser.id
-        const message = "Vous etes en train de vous inscrire sur le site HeygoMed pour continuer l'inscription veuillez suivre le lien suivant : " + link
+        const message = "Vous etes en train de vous inscrire sur le site HeygoMed pour continuer l'inscription veuillez <a href='"+link +"' >cliquer ici</a>."
         const objet = "Inscription Heygo"
         const nom = ""
         const replacements = {
@@ -1385,9 +1385,11 @@ app.post('/api/users/createtaxi', authenticateToken, async (req, res) => {
     const lieninscription = process.env.URL + "/InscriptionTaxi/" + chaineAlphanumeriqueAleatoire;
     const objet = "Création de votre compte taxi"
     const message = `Votre compte taxi a été créé avec succès. nous vous invitons a aller completer votre inscription sur le lien suivant : ${lieninscription}`;
+    nom = "";
     const replacements = {
       objet,
-      message
+      message,
+      nom
     };
     
     await sendEmail(email,replacements)
