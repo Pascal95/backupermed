@@ -601,6 +601,21 @@ app.get('/api/users/taxis', authenticateToken, async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+}
+);
+
+app.get('/api/users/taxis', authenticateToken, async (req, res) => {
+  try {
+    const taxis = await FicheUser.findAll({
+      where: { role: __ROLE_TAXI__ }
+    });
+
+    res.status(200).json({
+      taxis
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Demande MDP oublié
@@ -1371,20 +1386,27 @@ app.post('/api/users/createtaxi', authenticateToken, async (req, res) => {
   }
 
   try {
-    const { email } = req.body;
+    const { email, idFicheSelected, productSelected } = req.body;
     const chaineAlphanumeriqueAleatoire = genererChaineAlphanumeriqueAleatoire(16);
     const user = await User.create({ 
       email: email, 
-      USR_KEY: chaineAlphanumeriqueAleatoire });
+      USR_KEY: chaineAlphanumeriqueAleatoire,
+      idForfait: productSelected
+    });
     const fiche = await FicheUser.create({ 
       idCNX: user.id, 
       role: __ROLE_TAXI__, 
       mailcontact: email,
+      idFicheSuperieur: idFicheSelected,
       Valide: 1 
     });
-    const lieninscription = process.env.URL + "/InscriptionTaxi/" + chaineAlphanumeriqueAleatoire;
-    const objet = "Création de votre compte taxi"
-    const message = `Votre compte taxi a été créé avec succès. nous vous invitons a aller completer votre inscription sur le lien suivant : ${lieninscription}`;
+
+    // Ajoutez un paramètre pour indiquer la présence de idFicheSelected
+    const hasFiche = idFicheSelected != 0 ? 'true' : 'false';
+    const lieninscription = `${process.env.URL}/InscriptionTaxi/${chaineAlphanumeriqueAleatoire}?hasFiche=${hasFiche}`;
+    
+    const objet = "Création de votre compte taxi";
+    const message = `Votre compte taxi a été créé avec succès. Nous vous invitons à compléter votre inscription sur le lien suivant : <a href="${lieninscription}" target="_blank">Compléter mon inscription</a>`;
     nom = "";
     const replacements = {
       objet,
@@ -1410,21 +1432,18 @@ app.post('/api/users/completetaxi', upload.fields([
   { name: 'attestmedicale', maxCount: 1 },
   { name: 'cartepro', maxCount: 1 },
   { name: 'permis', maxCount: 1 }
-]),async (req,res) => {
-  try{
+]), async (req, res) => {
+  try {
     const { key, etape1, etape2, etape3, etape5, etape6 } = req.body;
-    console.log(etape6)
-    const user = await User.findOne({where: {USR_KEY: key}});
+    console.log(etape6);
+    const user = await User.findOne({ where: { USR_KEY: key } });
     if (!user) return res.status(404).json({ error: "Utilisateur non trouvé" });
-    
 
-    const hashedPassword = await bcrypt.hash(etape1.password, 10); 
+    const hashedPassword = await bcrypt.hash(etape1.password, 10);
     await user.update({ password: hashedPassword });
 
-
-    const ficheUtilisateur = await FicheUser.findOne({where: {idCNX: user.id}});
+    const ficheUtilisateur = await FicheUser.findOne({ where: { idCNX: user.id } });
     if (!ficheUtilisateur) return res.status(404).json({ error: "Fiche utilisateur non trouvée" });
-    
 
     await ficheUtilisateur.update({
       nom: etape2.nom,
@@ -1434,10 +1453,9 @@ app.post('/api/users/completetaxi', upload.fields([
       codepostal: etape2.codepostal,
       telephone: etape2.telephone,
       Valide: 2,
-      IdStripe: etape6.paymentMethodId
+      IdStripe: etape6 ? etape6.paymentMethodId : null
     });
 
-    
     const infopermis = await FichePermis.create({
       idFiche: ficheUtilisateur.idFiche,
       numPermis: etape5.numPermis,
@@ -1456,64 +1474,86 @@ app.post('/api/users/completetaxi', upload.fields([
       pecPMR: etape3.pecPMR
     });
 
-    // Création d'un client Stripe
-    try{
-      const customer = await stripe.customers.create({
-        email: ficheUtilisateur.mailcontact, // Utilisez l'email de votre utilisateur
-        payment_method: etape6.paymentMethodId, // ID de la méthode de paiement
-      });
-  
-      // Associer la méthode de paiement au client et définir comme méthode par défaut
-      await stripe.paymentMethods.attach(
-        etape6.paymentMethodId, // ID de la méthode de paiement
-        {customer: customer.id}
-      );
-  
-      await stripe.customers.update(
-        customer.id,
-        {
-          invoice_settings: {
-            default_payment_method: etape6.paymentMethodId,
-          },
-        }
-      );
-  
-      const subscription = await stripe.subscriptions.create({
-        customer: customer.id,
-        items: [{ price: 'price_1P3y8hESO4xwzKUzxzuQarWb' }], // Remplacez 'price_id' par l'ID de votre plan
-        expand: ['latest_invoice.payment_intent'],
-      });
-  
-      const objet = "Confirmation de votre compte taxi"
+    if (etape6 && etape6.paymentMethodId) {
+      // Récupération du prix du produit
+      const prices = await stripe.prices.list({ product: user.idForfait });
+      const priceId = prices.data[0].id; // Assure-toi que le produit a au moins un prix associé
+
+      if (!priceId) {
+        return res.status(400).json({ error: "Aucun prix trouvé pour le produit sélectionné" });
+      }
+
+      // Création d'un client Stripe et abonnement
+      try {
+        const customer = await stripe.customers.create({
+          email: ficheUtilisateur.mailcontact,
+          payment_method: etape6.paymentMethodId,
+        });
+
+        await stripe.paymentMethods.attach(
+          etape6.paymentMethodId,
+          { customer: customer.id }
+        );
+
+        await stripe.customers.update(
+          customer.id,
+          {
+            invoice_settings: {
+              default_payment_method: etape6.paymentMethodId,
+            },
+          }
+        );
+
+        const subscription = await stripe.subscriptions.create({
+          customer: customer.id,
+          items: [{ price: priceId }],
+          expand: ['latest_invoice.payment_intent'],
+        });
+
+        const objet = "Confirmation de votre compte taxi";
+        const contenu = `Votre compte taxi a été complété avec succès. Nous vous ferons parvenir un email de confirmation dès que votre compte sera validé.`;
+        const replacements = {
+          objet,
+          message: contenu,
+          nom: etape2.nom,
+        };
+        await sendEmail(ficheUtilisateur.mailcontact, replacements);
+
+        const message = await Message.create({
+          idFiche: ficheUtilisateur.idFiche,
+          Objet: objet,
+          Message: contenu
+        });
+
+        res.status(201).json({ message: "Taxi complété avec succès" });
+      } catch (stripeError) {
+        console.error('Erreur Stripe lors de la création du taxi:', stripeError);
+        return res.status(500).json({ error: "Erreur de paiement Stripe" });
+      }
+    } else {
+      const objet = "Confirmation de votre compte taxi";
       const contenu = `Votre compte taxi a été complété avec succès. Nous vous ferons parvenir un email de confirmation dès que votre compte sera validé.`;
       const replacements = {
         objet,
         message: contenu,
         nom: etape2.nom,
-    };
-      await sendEmail(ficheUtilisateur.mailcontact,replacements)
-  
+      };
+      await sendEmail(ficheUtilisateur.mailcontact, replacements);
+
       const message = await Message.create({
         idFiche: ficheUtilisateur.idFiche,
         Objet: objet,
         Message: contenu
       });
 
-  
       res.status(201).json({ message: "Taxi complété avec succès" });
-    }catch (stripeError){
-      console.error('Erreur Stripe lors de la création du taxi:', stripeError);
-      // Gestion spécifique des erreurs Stripe
-      return res.status(500).json({ error: "Erreur de paiement Stripe" });
     }
 
-  }catch (dberror) {
+  } catch (dberror) {
     console.error('Erreur BDD lors de la création du taxi:', dberror);
-    // Gestion spécifique des erreurs liées aux opérations en BDD
-    return res.status(500).json({ error: "Une erreur est survenu lors de votre enregistrement n'hesitez pas a contacter le support" });
+    return res.status(500).json({ error: "Une erreur est survenue lors de votre enregistrement, n'hésitez pas à contacter le support" });
   }
-}
-);
+});
 
 app.get('/api/users/doc/:key', authenticateToken, async (req, res) => {
 
@@ -1595,6 +1635,62 @@ app.post('/api/reservation/upload', upload.single('BonTransport'),authenticateTo
   res.status(200).json({ message: "File uploaded successfully" });
 });
 
+
+app.get('/api/subscriptions', async (req, res) => {
+  try {
+      // Vous pouvez ajouter des filtres ici si nécessaire
+      const subscriptions = await stripe.subscriptions.list({
+          limit: 100, // Vous pouvez ajuster la limite en fonction de vos besoins
+      });
+
+      res.json(subscriptions);
+  } catch (error) {
+      console.error('Erreur lors de la récupération des abonnements:', error);
+      res.status(500).json({ error: 'Erreur lors de la récupération des abonnements' });
+  }
+});
+
+app.get('/api/products', authenticateToken, async (req, res) => {
+  try {
+      // Vous pouvez ajouter des filtres ici si nécessaire
+      const products = await stripe.products.list({
+          limit: 100, // Vous pouvez ajuster la limite en fonction de vos besoins
+      });
+
+      res.json(products);
+  } catch (error) {
+      console.error('Erreur lors de la récupération des produits:', error);
+      res.status(500).json({ error: 'Erreur lors de la récupération des produits' });
+  }
+});
+
+app.get('/api/products/:productId', async (req, res) => {
+  const { productId } = req.params;
+
+  try {
+      const product = await stripe.products.retrieve(productId);
+
+      res.json(product);
+  } catch (error) {
+      console.error('Erreur lors de la récupération du produit:', error);
+      res.status(500).json({ error: 'Erreur lors de la récupération du produit' });
+  }
+});
+
+
+app.get('/api/inscription/complete/:key', async (req, res) => {
+  const {key} = req.params;
+  const user = await User.findOne({ where: {USR_KEY: key}});
+  if (!user) return res.status(404).json({error: "Utilisateur non trouvé"});
+
+  try{
+    const product = await stripe.products.retrieve(user.idForfait);
+    const price = await stripe.prices.list({product: user.idForfait});
+    res.status(200).json({product, price});
+  } catch (error) {
+    res.status(500).json({error: error.message});
+  }
+});
 
 const PORT = process.env.PORT || 3002;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

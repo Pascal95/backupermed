@@ -69,6 +69,10 @@ module.exports = (sequelize) => {
             type: DataTypes.STRING,
             allowNull: true
         },
+        idFicheSuperieur:{
+            type: DataTypes.INTEGER,
+            allowNull: true
+        },
     }, {
     // Options du modèle
     sequelize, // instance de connexion

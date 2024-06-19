@@ -45,6 +45,10 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING,
       allowNull: true,
     },
+    idForfait: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
   }, {
     // Options du modèle
     sequelize, // instance de connexion
