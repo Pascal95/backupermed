@@ -15,6 +15,10 @@ const setupJour = require ('./Jour')
 const sequelize = new Sequelize(process.env.DB_DATABASE, process.env.DB_USERNAME, process.env.DB_PASSWORD, {
   host: process.env.DB_HOST,
   dialect: 'mysql',
+  dialectOptions: {
+    timezone: 'Etc/GMT-2', // ou 'Europe/Paris'
+  },
+  timezone: '+02:00',
 });
 
 // Initialisez vos modèles ici
