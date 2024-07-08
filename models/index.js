@@ -1,4 +1,4 @@
-const { Sequelize } = require('sequelize');
+const { Sequelize, DataTypes } = require('sequelize');
 require('dotenv').config();
 const setupUserModel = require('./users');
 const setupFicheUserModel = require ('./ficheuser')
@@ -22,37 +22,28 @@ const sequelize = new Sequelize(process.env.DB_DATABASE, process.env.DB_USERNAME
 });
 
 // Initialisez vos modèles ici
-const User = setupUserModel(sequelize);
-const FicheUser = setupFicheUserModel(sequelize);
-const FicheVehicule = setupFicheVehiculeModel(sequelize);
-const FichePermis = setupFichePermisModel(sequelize);
-const Reservation = setupReservation(sequelize)
-const BonTransport = setupBonTransport(sequelize);
-const Message = setupMessage(sequelize);
-const Jour = setupJour(sequelize);
-const Disponibilite = setupDisponibilite(sequelize);
+const models = {
+  User: setupUserModel(sequelize, DataTypes),
+  FicheUser: setupFicheUserModel(sequelize, DataTypes),
+  FicheVehicule: setupFicheVehiculeModel(sequelize, DataTypes),
+  FichePermis: setupFichePermisModel(sequelize, DataTypes),
+  Reservation: setupReservation(sequelize, DataTypes),
+  BonTransport: setupBonTransport(sequelize, DataTypes),
+  Message: setupMessage(sequelize, DataTypes),
+  Jour: setupJour(sequelize, DataTypes),
+  Disponibilite: setupDisponibilite(sequelize, DataTypes),
+};
 
-
-FicheUser.associate({ FichePermis, BonTransport, FicheVehicule, Disponibilite, Message, Reservation });
-FichePermis.associate({ FicheUser });
-FicheVehicule.associate({ FicheUser });
-BonTransport.associate({ FicheUser });
-Disponibilite.associate({ FicheUser, Jour });
-Message.associate({ FicheUser });
-Reservation.associate({ FicheUser });
+Object.values(models).forEach(model => {
+  if (model.associate) {
+    model.associate(models);
+  }
+});
 
 // Synchronisez tous les modèles avec la base de données
 sequelize.sync();
 
 module.exports = {
-  sequelize, // l'instance de connexion
-  User,
-  FicheUser,
-  FicheVehicule,
-  FichePermis,
-  Reservation,
-  BonTransport,
-  Message,
-  Disponibilite,
-  Jour
+  sequelize,
+  ...models,
 };

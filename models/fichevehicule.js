@@ -48,7 +48,7 @@ module.exports = (sequelize) => {
     FicheVehicule.associate = (models) => {
         FicheVehicule.belongsTo(models.FicheUser, {
             foreignKey: 'idFiche',
-            as: 'utilisateur'
+            as: 'vehicule'
         });
     };
     return FicheVehicule;

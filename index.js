@@ -259,7 +259,7 @@ app.post('/api/users/ficheuser',optionalAuthenticateToken, async (req, res) => {
     const { nom, prenom, adresse, ville, codepostal, mailcontact, telephone, role, idCNX, signature, numSS } = req.body;
     let idFicheMere = 0;
     // Définir la valeur de Valide en fonction du rôle
-    const valide = role === __ROLE_UTILISATEUR__ || role === __ROLE_SANSCOMPTE__;
+    const valide = (role === __ROLE_UTILISATEUR__ || role === __ROLE_SANSCOMPTE__) ? 3 : 0;
 // true si le rôle est __ROLE_UTILISATEUR__, sinon false
     if(req.user){
       idFicheMere = req.user.idFiche
@@ -579,6 +579,28 @@ app.get('/api/users/mesusers', authenticateToken, async (req, res) => {
 
     const listeUser = await FicheUser.findAll({
       where: conditions
+    });
+
+    res.status(200).json({
+      listeUser
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/users/listeusers', authenticateToken, async (req, res) => {
+  try {
+    const listeUser = await FicheUser.findAll({
+      where: { Valide: 3 },
+      include: [
+        {
+          model: FicheVehicule,
+          as: 'vehicule',
+          attributes: ['Marque', 'Modele', 'Annee', 'pecPMR'],
+          required: false, // Left join to include users without vehicles
+        },
+      ],
     });
 
     res.status(200).json({
