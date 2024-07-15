@@ -15,13 +15,19 @@ const fs = require('fs-extra');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const archiver = require('archiver');
 
+const app = express();
+app.use(cors());
+
+
+let keyporc = "";
 
 // Configuration de storage Multer
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
+    console.log("keyporc : ", keyporc)
       // Détermination du dossier de base en fonction de la présence d'une clé ou du type de fichier
       let baseFolder = 'uploads';
-      let specificFolder = req.body.key || 'default';  // Utilisation de 'default' si aucune clé n'est spécifiée
+      let specificFolder = req.body.key || keyporc || 'default'; // Utilisation de 'default' si aucune clé n'est spécifiée
 
       // Logique spéciale pour 'BonTransport'
       if (file.fieldname === 'BonTransport' && !req.body.key) {
@@ -77,6 +83,61 @@ const upload = multer({
   fileFilter: fileFilter,
   limits: limits
 });
+
+
+// Middleware pour analyser les requêtes JSON
+app.use(express.json());
+
+// Middleware pour analyser les requêtes URL-encoded
+app.use(express.urlencoded({ extended: true }));
+
+// Configuration de storage Multer pour les fichiers ajoutés par le superviseur
+const storageSuperviseur = multer.diskStorage({
+  destination: async function (req, file, cb) {
+    console.log("req.body : ", req)
+    const { idFiche } = req.body;
+    console.log("file : <" + file + ">");
+    if (!idFiche) {
+      return cb(new Error('idFiche is required'));
+    }
+
+    try {
+      const ficheUser = await FicheUser.findOne({ where: { idFiche } });
+      if (!ficheUser) {
+        return cb(new Error('Utilisateur non trouvé'));
+      }
+
+      const user = await User.findOne({ where: { id: ficheUser.idCNX } });
+      if (!user) {
+        return cb(new Error('Utilisateur non trouvé'));
+      }
+
+      const key = user.USR_KEY;
+      const uploadPath = path.join(__dirname, 'uploads', key);
+
+      // Assure la création du dossier s'il n'existe pas
+      await fs.ensureDir(uploadPath);
+      cb(null, uploadPath);
+    } catch (err) {
+      cb(err);
+    }
+  },
+  filename: function (req, file, cb) {
+    const timestamp = Date.now();
+    const fileExt = path.extname(file.originalname);
+    const idFiche = req.body.idFiche;
+    const filename = `${idFiche}-${file.fieldname}-${timestamp}${fileExt}`;
+    cb(null, filename);
+  }
+});
+
+const uploadSuperviseur = multer({
+  storage: storageSuperviseur,
+  fileFilter: fileFilter,
+  limits: limits // 5 MB limit
+});
+
+
 // const storage = multer.memoryStorage(); // ou multer.diskStorage({ destination: 'chemin/vers/dossier/des/uploads', })
 
 
@@ -95,9 +156,7 @@ const __ETAT_ANNULE__ = 3
 
 
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+
 
 
 
@@ -1638,7 +1697,8 @@ app.get('/api/reservation/download/:idReservation', async (req, res) => {
   }
 });
 
-app.post('/api/reservation/upload', upload.single('BonTransport'),authenticateToken, async (req, res) => {
+app.post('/api/reservation/upload', upload.fields([
+  { name: 'superviseurFile', maxCount: 1 }]),authenticateToken, async (req, res) => {
   const { idReservation } = req.body;
   const reservation = await Reservation.findByPk(idReservation);
 
@@ -1713,6 +1773,42 @@ app.get('/api/inscription/complete/:key', async (req, res) => {
     res.status(500).json({error: error.message});
   }
 });
+
+app.get('/api/users/key/:idFiche', authenticateToken, async (req, res) => {
+  const { idFiche } = req.params;
+  if(req.user.role !== __ROLE_SUPERVISEUR__){
+    return res.status(403).json({error: "Action non autorisée"});
+  }
+  try{
+    const fiche = await FicheUser.findOne({where: {idFiche: idFiche}});
+    const user = await User.findOne({where: {id: fiche.idCNX}});
+    keyporc = user.USR_KEY;
+    res.status(200).json({key: user.USR_KEY});
+  } catch(error){
+    res.status(500).json({error: error.message});
+  }
+
+
+});
+
+
+app.post('/api/users/superviseur/upload', authenticateToken,upload.single('superviseurFile'), async (req, res) => {
+  try {
+    const key = req.body.key;
+    keyporc = ""
+    console.log(key)
+    if (req.user.role !== __ROLE_SUPERVISEUR__) {
+      return res.status(403).json({ error: "Action non autorisée" });
+    }
+
+    res.status(200).json({ message: 'Fichier uploadé avec succès' });
+  } catch (error) {
+    console.error('Erreur lors de l\'upload du fichier:', error);
+    res.status(500).json({ error: 'Erreur lors de l\'upload du fichier' });
+  }
+});
+
+
 
 const PORT = process.env.PORT || 3002;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
