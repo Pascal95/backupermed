@@ -20,6 +20,7 @@ app.use(cors());
 
 
 let keyporc = "";
+let namefilebonporc="";
 
 // Configuration de storage Multer
 const storage = multer.diskStorage({
@@ -44,17 +45,18 @@ const storage = multer.diskStorage({
   filename: function (req, file, cb) {
       const timestamp = Date.now();
       const fileExt = path.extname(file.originalname);
+      console.log("ext du fichier : <" + fileExt + ">")
       let prefix = 'file';
 
       // Nom de fichier spécifique pour 'BonTransport'
       if (file.fieldname === 'BonTransport') {
-          const idReservation = req.body.idReservation; // Assurez-vous que cet ID est passé dans le corps de la requête
-          prefix = `bon_transport_${timestamp}_${idReservation}`;
+          prefix = `bon_transport_${timestamp}`;
       } else {
           prefix = `${file.fieldname}-${timestamp}`;
       }
 
       const filename = `${prefix}${fileExt}`;
+      namefilebonporc = filename;
       cb(null, filename);
   }
 });
@@ -271,18 +273,33 @@ app.post('/api/test/email', async (req, res) => {
 // Endpoint pour la connexion
 app.post('/api/users/login', async (req, res) => {
   try {
-      const { email, password } = req.body;
-      const user = await User.findOne({ where: { email } });
-      if (!user || !(await bcrypt.compare(password, user.password))) {
-          return res.status(401).json({ message: "Invalid credentials" });
-      }
-      
-      await user.update({ derniereconnexion: new Date() });
-      const fiche = await FicheUser.findOne({where: {idCNX: user.id}})
-      const token = jwt.sign({ idFiche: fiche.idFiche, role: fiche.role }, process.env.AUTH_TOKEN, { expiresIn: '1h' });
-      res.json({ token });
+    const { email, password } = req.body;
+    const user = await User.findOne({ where: { email } });
+    
+    // Vérifiez si l'utilisateur existe
+    if (!user) {
+      return res.status(401).json({ message: "Email ou mot de passe incorrect" });
+    }
+    
+    // Vérifiez si le mot de passe est correct
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: "Email ou mot de passe incorrect" });
+    }
+    
+    // Mettre à jour la dernière connexion de l'utilisateur
+    await user.update({ derniereconnexion: new Date() });
+
+    const fiche = await FicheUser.findOne({ where: { idCNX: user.id } });
+    const token = jwt.sign(
+      { idFiche: fiche.idFiche, role: fiche.role },
+      process.env.AUTH_TOKEN,
+      { expiresIn: '1h' }
+    );
+
+    res.json({ token });
   } catch (error) {
-      res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -1672,33 +1689,45 @@ app.get('/api/reservation/download/:idReservation', async (req, res) => {
   const { idReservation } = req.params;
 
   try {
-    const reservation = await Reservation.findOne({ where: { idReservation: idReservation } });
+    const reservation = await Reservation.findOne({ where: { idReservation } });
 
     if (!reservation || !reservation.bonTransportPath) {
+      console.log('Reservation or file path not found in database.');
       return res.status(404).send('File not found.');
     }
-
+    
     // Construire le chemin complet vers le fichier
     const filePath = path.join(__dirname, 'uploads', 'BonTransport', reservation.bonTransportPath);
+    console.log('File path:', filePath);
 
     // Vérifier si le fichier existe réellement sur le disque
-    if (fs.existsSync(filePath)) {
+    fs.access(filePath, fs.constants.R_OK, (err) => {
+      if (err) {
+        console.log('File not found or not readable:', err);
+        return res.status(404).send('File not found on server.');
+      }
+
       // Définir les headers pour le téléchargement
       res.setHeader('Content-Disposition', 'attachment; filename=' + path.basename(filePath));
       res.setHeader('Content-Type', 'application/octet-stream');
 
       // Envoyer le fichier
-      res.sendFile(filePath);
-    } else {
-      res.status(404).send('File not found on server.');
-    }
+      res.sendFile(filePath, (err) => {
+        if (err) {
+          console.error('Error sending file:', err);
+          res.status(500).send('Error sending file.');
+        }
+      });
+    });
   } catch (error) {
+    console.error('Server error:', error);
     res.status(500).send(error.message);
   }
 });
 
 app.post('/api/reservation/upload', upload.fields([
-  { name: 'superviseurFile', maxCount: 1 }]),authenticateToken, async (req, res) => {
+  { name: 'BonTransport', maxCount: 1 }]),authenticateToken, async (req, res) => {
+    console.log(req.body)
   const { idReservation } = req.body;
   const reservation = await Reservation.findByPk(idReservation);
 
@@ -1706,14 +1735,10 @@ app.post('/api/reservation/upload', upload.fields([
     return res.status(404).json({ error: "Reservation not found" });
   }
 
-  if (!req.file) {
-    return res.status(400).json({ error: "No file uploaded" });
-  }
-
   // Enregistrez le chemin du fichier dans la base de données
-  reservation.bonTransportPath = req.file.filename;
+  reservation.bonTransportPath = namefilebonporc;
   await reservation.save();
-
+  namefilebonporc = "";
   res.status(200).json({ message: "File uploaded successfully" });
 });
 
