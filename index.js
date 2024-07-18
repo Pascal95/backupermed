@@ -307,6 +307,12 @@ app.post('/api/users/login', async (req, res) => {
 app.post('/api/users/register', async (req, res) => {
     try {
         const { email, password } = req.body;
+
+        const existingUser = await User.findOne({ where: { email: email } });
+        if (existingUser) {
+          return res.status(400).json({ error: "L'utilisateur existe déjà" });
+        }
+        
         const hashedPassword = await bcrypt.hash(password, 10);
         const newUser = await User.create({
             email,
@@ -1480,17 +1486,25 @@ app.post('/api/messages', authenticateToken, async (req, res) => {
 
 app.post('/api/users/createtaxi', authenticateToken, async (req, res) => {
   if (req.user.role !== __ROLE_SUPERVISEUR__) {
-      return res.status(403).json({ error: "Action non autorisée" });
+    return res.status(403).json({ error: "Action non autorisée" });
   }
 
   try {
     const { email, idFicheSelected, productSelected } = req.body;
+
+    // Vérifiez si l'utilisateur existe déjà
+    const existingUser = await User.findOne({ where: { email: email } });
+    if (existingUser) {
+      return res.status(400).json({ error: "L'utilisateur existe déjà" });
+    }
+
     const chaineAlphanumeriqueAleatoire = genererChaineAlphanumeriqueAleatoire(16);
     const user = await User.create({ 
       email: email, 
       USR_KEY: chaineAlphanumeriqueAleatoire,
       idForfait: productSelected
     });
+
     const fiche = await FicheUser.create({ 
       idCNX: user.id, 
       role: __ROLE_TAXI__, 
@@ -1502,7 +1516,7 @@ app.post('/api/users/createtaxi', authenticateToken, async (req, res) => {
     // Ajoutez un paramètre pour indiquer la présence de idFicheSelected
     const hasFiche = idFicheSelected != 0 ? 'true' : 'false';
     const lieninscription = `${process.env.URL}/InscriptionTaxi/${chaineAlphanumeriqueAleatoire}?hasFiche=${hasFiche}`;
-    
+
     const objet = "Création de votre compte taxi";
     const message = `Votre compte taxi a été créé avec succès. Nous vous invitons à compléter votre inscription sur le lien suivant : <a href="${lieninscription}" target="_blank">Compléter mon inscription</a>`;
     nom = "";
@@ -1511,15 +1525,16 @@ app.post('/api/users/createtaxi', authenticateToken, async (req, res) => {
       message,
       nom
     };
-    
-    await sendEmail(email,replacements)
+
+    await sendEmail(email, replacements);
     res.status(201).json({ message: "Taxi créé avec succès" });
 
   } catch (error) {
     console.error('Erreur lors de la création du taxi :', error);
     res.status(500).json({ error: "Erreur interne du serveur" });
   }
-}); 
+});
+
 
 app.post('/api/users/completetaxi', upload.fields([
   { name: 'controletechnique', maxCount: 1 },
