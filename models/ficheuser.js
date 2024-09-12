@@ -29,6 +29,10 @@ module.exports = (sequelize) => {
             type: DataTypes.STRING,
             allowNull: true
         },
+        datenaissance:{
+            type: DataTypes.DATE,
+            allowNull: true
+        },
         mailcontact:{
             type: DataTypes.STRING,
             allowNull: false
