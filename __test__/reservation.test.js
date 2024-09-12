@@ -4,14 +4,15 @@ const request = require('supertest');
 const app = require('../app');  // Remplace par ton fichier app.js
 const { Reservation, FicheUser } = require('../models');  // Mock des modèles
 const { authenticateToken } = require('../middlewares/auth');
+const { sequelize } = require('../models');
 let server;
 beforeAll((done) => {
   server = app.listen(0, () => done()); // Laisse le système choisir un port libre
 });
 
-afterAll((done) => {
-  server.close(done);
-});
+afterAll(async () => {
+    await sequelize.close();  // Fermer la connexion Sequelize
+  });
 jest.mock('../models');  // Mock des modèles
 jest.mock('../middlewares/auth');  // Mock du middleware d'authentification
 

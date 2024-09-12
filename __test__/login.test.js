@@ -4,15 +4,16 @@ const { User, FicheUser } = require('../models');  // Mock ton modèle User
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
+const { sequelize } = require('../models');
 
 let server;
 beforeAll((done) => {
   server = app.listen(0, () => done()); // Laisse le système choisir un port libre
 });
 
-afterAll((done) => {
-  server.close(done);
-});
+afterAll(async () => {
+    await sequelize.close();  // Fermer la connexion Sequelize
+  });
 
 jest.mock('../models');  // Mock du modèle User
 
