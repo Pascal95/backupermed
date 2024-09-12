@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "migrate": "npx sequelize db:migrate",
+    "migrate": "npx sequelize db:migrate --config config/config.js",
     "test": "jest --coverage"
   },
   "repository": {
