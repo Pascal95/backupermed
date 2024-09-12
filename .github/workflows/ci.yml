@@ -24,18 +24,27 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 3
-
     steps:
       - uses: actions/checkout@v2
+
+      # Configuration de Node.js
       - name: Set up Node.js
         uses: actions/setup-node@v2
         with:
           node-version: "16"
+
+      # Installation des dépendances
       - run: npm install
-      - run: npm run migrate # Si tu as des migrations, exécute-les ici
-      - run: npm test
+
+      # Ajout de l'étape pour exécuter les migrations si tu en as
+      - name: Run migrations
+        run: npm run migrate # Modifie cette ligne si tu as des migrations
+
+      # Exécution des tests
+      - name: Run tests
+        run: npm test
         env:
           DB_HOST: 127.0.0.1
-          DB_USER: root
+          DB_USERNAME: root
           DB_PASSWORD: root
-          DB_NAME: test_db
+          DB_DATABASE: test_db
