@@ -48,3 +48,14 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_DATABASE: ${{ secrets.DB_DATABASE }}
           DB_HOST: ${{ secrets.DB_HOST }}
+          AUTH_TOKEN: ${{ secrets.AUTH_TOKEN }}
+          MAIL_DRIVER: ${{ secrets.MAIL_DRIVER }}
+          MAIL_HOST: ${{ secrets.MAIL_HOST }}
+          MAIL_PORT: ${{ secrets.MAIL_PORT }}
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          FOLDER_PERMIS: ${{ secrets.FOLDER_PERMIS }}
+          FOLDER_CARTE_GRISE: ${{ secrets.FOLDER_CARTE_GRISE }}
+          FOLDER_BON_TRANSPORT: ${{ secrets.FOLDER_BON_TRANSPORT }}
+          URL: ${{ secrets.URL }}
