@@ -1,21 +1,21 @@
-// __tests__/reservation.test.js
-
 const request = require('supertest');
 const app = require('../app');  // Remplace par ton fichier app.js
 const { Reservation, FicheUser } = require('../models');  // Mock des modèles
 const { authenticateToken } = require('../middlewares/auth');
 const { sequelize } = require('../models');
 let server;
+
 beforeAll((done) => {
-    jest.spyOn(console, 'error').mockImplementation(() => {});
-    server = app.listen(0, () => done()); // Laisse le système choisir un port libre
+  jest.spyOn(console, 'error').mockImplementation(() => {});
+  server = app.listen(0, () => done()); // Laisse le système choisir un port libre
 });
-  
+
 afterAll(async () => {
-    
-    console.error.mockRestore(); 
-    await sequelize.close();  // Fermer la connexion Sequelize
+  console.error.mockRestore(); 
+  await server.close();  // Ferme le serveur proprement
+  await sequelize.close();  // Ferme la connexion Sequelize
 });
+
 jest.mock('../models');  // Mock des modèles
 jest.mock('../middlewares/auth');  // Mock du middleware d'authentification
 
@@ -29,7 +29,6 @@ describe('POST /api/reservation/newreservation', () => {
   });
 
   it('should create a new reservation and return 201', async () => {
-    // Mock pour FicheUser
     const mockUser = {
       idFiche: 1,
       nom: 'Test',
@@ -37,7 +36,6 @@ describe('POST /api/reservation/newreservation', () => {
     };
     FicheUser.findByPk.mockResolvedValue(mockUser);
 
-    // Mock pour la création de réservation
     Reservation.create.mockResolvedValue({ idReservation: 1 });
 
     const response = await request(server)
@@ -61,7 +59,7 @@ describe('POST /api/reservation/newreservation', () => {
   });
 
   it('should return 404 if user is not found', async () => {
-    FicheUser.findByPk.mockResolvedValue(null);  // Simule que l'utilisateur n'existe pas
+    FicheUser.findByPk.mockResolvedValue(null); 
 
     const response = await request(server)
       .post('/api/reservation/newreservation')
@@ -84,7 +82,7 @@ describe('POST /api/reservation/newreservation', () => {
   });
 
   it('should return 500 if there is a server error', async () => {
-    FicheUser.findByPk.mockRejectedValue(new Error('Server error'));  // Simule une erreur serveur
+    FicheUser.findByPk.mockRejectedValue(new Error('Server error'));
 
     const response = await request(server)
       .post('/api/reservation/newreservation')

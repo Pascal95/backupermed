@@ -23,42 +23,37 @@ jest.mock('../models');  // Mock du modèle User
 describe('POST /api/users/login', () => {
 
     beforeEach(() => {
-      jest.clearAllMocks();  // Nettoie les mocks avant chaque test
-    });
+        jest.clearAllMocks();  // Nettoie les mocks avant chaque test
+      });
   
-    it('should return a token if credentials are valid', async () => {
-      // Mocker l'utilisateur dans User
-      const mockUser = {
-        id: 1,
-        email: 'correct@uper.fr',
-        password: await bcrypt.hash('Password95!', 10),  // Simuler un mot de passe haché
-      };
-  
-      User.findOne.mockResolvedValue(mockUser);  // Simuler que l'utilisateur existe dans User
-  
-      // Simuler la correspondance dans FicheUser
-      const mockFicheUser = {
-        idFiche: 1,
-        role: 1,  // Exemple de rôle
-      };
-      
-      FicheUser.findOne.mockResolvedValue(mockFicheUser);  // Simuler que la fiche existe dans FicheUser
-  
-      // Simuler la validation du mot de passe
-      bcrypt.compare = jest.fn().mockResolvedValue(true);
-  
-      // Faire la requête de test
-      const response = await request(app)
-        .post('/api/users/login')
-        .send({
+      it('should return a token if credentials are valid', async () => {
+        // Mocker l'utilisateur dans User
+        const mockUser = {
+          id: 1,
           email: 'correct@uper.fr',
-          password: 'Password95!',
-        });
+          password: await bcrypt.hash('Password95!', 10),  // Simuler un mot de passe haché
+        };
   
-      // Vérifier la réponse
-      expect(response.status).toBe(200);  // Le statut devrait être 200 OK
-      expect(response.body.token).toBeDefined();  // Le token doit être présent dans la réponse
-    });
+        User.findOne.mockResolvedValue(mockUser);  // Simuler que l'utilisateur existe dans User
+  
+        const mockFicheUser = {
+          idFiche: 1,
+          role: 1,  // Exemple de rôle
+        };
+  
+        FicheUser.findOne.mockResolvedValue(mockFicheUser);  // Simuler que la fiche existe dans FicheUser
+        bcrypt.compare = jest.fn().mockResolvedValue(true);
+  
+        const response = await request(app)
+          .post('/api/users/login')
+          .send({
+            email: 'correct@uper.fr',
+            password: 'Password95!',
+          });
+  
+        expect(response.status).toBe(200);  
+        expect(response.body.token).toBeDefined(); 
+      });
   
     it('should return 401 if email does not exist', async () => {
       // Simuler qu'aucun utilisateur n'est trouvé
