@@ -16,6 +16,7 @@ const sequelize = new Sequelize(process.env.DB_DATABASE, process.env.DB_USERNAME
   host: process.env.DB_HOST,
   dialect: 'mysql',
   dialectOptions: {
+    charset: 'utf8mb4',
     timezone: 'Etc/GMT-2', // ou 'Europe/Paris'
   },
   timezone: '+02:00',

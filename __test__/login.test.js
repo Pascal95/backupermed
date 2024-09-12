@@ -8,12 +8,15 @@ const { sequelize } = require('../models');
 
 let server;
 beforeAll((done) => {
+  jest.spyOn(console, 'error').mockImplementation(() => {});
   server = app.listen(0, () => done()); // Laisse le système choisir un port libre
 });
 
 afterAll(async () => {
+    
+    console.error.mockRestore(); 
     await sequelize.close();  // Fermer la connexion Sequelize
-  });
+});
 
 jest.mock('../models');  // Mock du modèle User
 
