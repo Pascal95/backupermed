@@ -1,0 +1,61 @@
+# .gitlab-ci.yml
+stages: # Les différentes étapes du pipeline
+  - test
+  - build
+  - deploy
+
+# Utilisation d'une image Docker contenant Node.js pour exécuter les tests et le build
+image: node:14
+
+# Variables pour gérer l'environnement (par exemple les credentials pour le déploiement)
+variables:
+  NODE_ENV: test
+  SSH_PRIVATE_KEY: $SSH_PRIVATE_KEY
+
+before_script:
+  # Préparation de l'environnement SSH
+  - "which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )"
+  - eval $(ssh-agent -s)
+  - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+  - mkdir -p ~/.ssh
+  - chmod 700 ~/.ssh
+  - ssh-keyscan 51.178.82.36 >> ~/.ssh/known_hosts # Ajout du serveur aux hôtes de confiance
+
+# Étape de test : installation des dépendances et exécution des tests
+test:
+  stage: test
+  script:
+    - npm install # Installation des dépendances
+    - npm test # Exécution des tests unitaires avec Jest
+  artifacts:
+    paths:
+      - test-results.xml # Stocker les résultats des tests
+  when: on_success # Exécuter cette étape uniquement si le commit/push a réussi
+  only:
+    - main # Exécuter uniquement sur la branche 'main' (ou 'master')
+
+# Étape de build : construire l'application si les tests passent
+build:
+  stage: build
+  script:
+    - npm install
+    - npm run build # Build de l'application React (par exemple pour le front)
+  artifacts:
+    paths:
+      - dist/ # Dossier contenant les fichiers générés (si nécessaire)
+  when: on_success # Exécuter uniquement si les tests ont réussi
+  only:
+    - main
+
+# Étape de déploiement : déployer l'application sur le serveur de staging
+deploy:
+  stage: deploy
+  script:
+    - echo "Déploiement en cours..."
+    # Commandes pour se connecter au serveur et déployer (via SSH par exemple)
+    - ssh debian@51.178.82.36 "cd /var/www/backgitlab && git pull origin main && npm install && pm2 restart all"
+  environment:
+    name: staging # Nom de l'environnement cible (ici staging)
+  when: on_success # Exécuter uniquement si le build a réussi
+  only:
+    - main
