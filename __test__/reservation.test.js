@@ -12,7 +12,9 @@ beforeAll((done) => {
 
 afterAll(async () => {
     await server.close();  // Ferme le serveur après les tests
+    await sequelize.close();
     jest.restoreAllMocks();  // Restaure les méthodes console originales
+
 });
 
 jest.mock('../models');  // Mock des modèles
