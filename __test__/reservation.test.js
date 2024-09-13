@@ -116,5 +116,7 @@ describe('POST /api/reservation/newreservation', () => {
         console.warn('Error ignored for the purpose of this test: ', error);
     }
 
+
+    
   });
 });
