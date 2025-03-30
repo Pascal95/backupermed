@@ -15,7 +15,7 @@ module.exports = (sequelize) => {
         },
         idTaxi:{
             type: DataTypes.INTEGER,
-            allowNull: false
+            allowNull: true
         },
         AdresseDepart:{
             type: DataTypes.STRING,

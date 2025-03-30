@@ -78,7 +78,7 @@ const fileFilter = (req, file, cb) => {
 
 
 const limits = {
-  fileSize: 1024 * 1024 * 5 // 5 MB limit
+  fileSize: 1024 * 1024 * 10 // 5 MB limit
 };
 
 // Middleware Multer pour gérer l'upload des fichiers
@@ -332,6 +332,7 @@ app.post('/api/users/register', async (req, res) => {
 app.post('/api/users/ficheuser',optionalAuthenticateToken, async (req, res) => {
   try {
     const { nom, prenom, adresse, ville, codepostal,datenaissance, mailcontact, telephone, role, idCNX, signature, numSS } = req.body;
+    console.log("req : ", req.body)
     let idFicheMere = 0;
     // Définir la valeur de Valide en fonction du rôle
     const valide = (role === __ROLE_UTILISATEUR__ || role === __ROLE_SANSCOMPTE__) ? 3 : 0;
@@ -405,7 +406,18 @@ app.put('/api/users/ficheuser/:id', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/users/ficheuser/:idCNX', async (req, res) => {
+  try {
+      const fiche = await FicheUser.findOne({ where: { idCNX: req.params.idCNX } });
 
+      if (!fiche) return res.status(404).json({ formulaireComplet: false });
+
+      const complet = fiche.nom && fiche.prenom && fiche.adresse && fiche.ville && fiche.mailcontact;
+      res.json({ formulaireComplet: !!complet });
+  } catch (error) {
+      res.status(500).json({ error: error.message });
+  }
+});
 
 app.post('/api/users/fichevehicule', upload.single('carteGrise'), async (req, res) => {
   try {
@@ -792,7 +804,7 @@ app.post('/api/reservation/newreservation', authenticateToken, async (req, res) 
     const { AdresseDepart, AdresseArrive, Distance, DureeTrajet, HeureConsult, HeureDepart, AllerRetour, DureeConsult, idFicheUser, pecPMR } = req.body;
     const idClient = idFicheUser;
     const user = await FicheUser.findByPk(idClient);
-    let idTaxi = 0;
+    let idTaxi = null;
     let Etat = __ETAT_ENATTENTE__;
     if (!user) {
       return res.status(404).json({ errorCode: "USER_NOT_FOUND" });
@@ -1578,6 +1590,7 @@ app.post('/api/users/completetaxi', upload.fields([
       idFiche: ficheUtilisateur.idFiche,
       Marque: etape3.marquevehicule,
       Modele: etape3.modele,
+      Plaque: etape3.plaque,
       couleur: etape3.couleur,
       Annee: etape3.annee,
       numImmatriculation: etape3.immatriculation,
