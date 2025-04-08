@@ -18,7 +18,11 @@ const e = require('express');
 const { authenticateToken } = require('./middlewares/auth'); 
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: ['https://www.taxis-med.fr'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true // Si tu utilises des cookies / sessions
+}));
 
 
 let keyporc = "";
