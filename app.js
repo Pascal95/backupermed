@@ -20,13 +20,14 @@ const { authenticateToken } = require('./middlewares/auth');
 
 const app = express();
 const corsOptions = {
-  origin: '*', // Ou une seule URL comme 'https://www.taxis-med.fr'
+  origin: ['http://localhost:5173', 'https://www.taxis-med.fr'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['*']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 };
 
 app.use(cors(corsOptions));
-
+app.options('*', cors(corsOptions));
 
 let keyporc = "";
 let namefilebonporc="";
