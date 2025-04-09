@@ -19,10 +19,13 @@ const e = require('express');
 const { authenticateToken } = require('./middlewares/auth'); 
 
 const app = express();
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
-}));
+const corsOptions = {
+  origin: '*', // Ou une seule URL comme 'https://www.taxis-med.fr'
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
 
 
 let keyporc = "";
