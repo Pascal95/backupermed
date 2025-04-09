@@ -1,4 +1,5 @@
 const express = require('express');
+const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { User, FicheUser, FicheVehicule, FichePermis, Reservation, BonTransport, Message, Disponibilite, Jour} = require('./models');
@@ -7,7 +8,7 @@ const { Op } = require('sequelize');
 const multer = require('multer');
 const path = require('path');
 const nodemailer = require('nodemailer');
-const cors = require('cors');
+
 const { sequelize } = require('./models');
 require('dotenv').config();
 const moment = require('moment');
