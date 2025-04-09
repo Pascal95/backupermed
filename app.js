@@ -19,21 +19,7 @@ const e = require('express');
 const { authenticateToken } = require('./middlewares/auth'); 
 
 const app = express();
-const allowedOrigins = [
-  'https://www.taxis-med.fr',
-  'http://localhost:3002'
-];
-
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true
-}));
+app.use(cors());
 
 
 let keyporc = "";
