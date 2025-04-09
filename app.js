@@ -22,7 +22,7 @@ const app = express();
 const corsOptions = {
   origin: '*', // Ou une seule URL comme 'https://www.taxis-med.fr'
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['*']
 };
 
 app.use(cors(corsOptions));
