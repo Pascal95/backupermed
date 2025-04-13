@@ -19,15 +19,7 @@ const e = require('express');
 const { authenticateToken } = require('./middlewares/auth'); 
 
 const app = express();
-const corsOptions = {
-  origin: ['http://localhost:5173', 'https://www.taxis-med.fr'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-};
-
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.use(cors());
 
 let keyporc = "";
 let namefilebonporc="";
@@ -876,12 +868,8 @@ app.put('/api/reservation/annulerreservation', authenticateToken, async (req,res
   try{
     const {idReservation} = req.body;
     const reservation = await Reservation.findByPk(idReservation);
-    if (reservation.Etat ===  __ETAT_CONFIRME__ || reservation.Etat === __ETAT_ENATTENTE__ ){
-      await reservation.update({Etat: __ETAT_ANNULE__});
-      return res.status(201).json({ message: "Reservation annulée avec succès"});
-    } else {
-      return res.status(400).json({ error: "La reservation ne peut pas etre annulée"});
-    }
+    await reservation.update({ Etat: __ETAT_ANNULE__, idTaxi: null });
+    return res.status(201).json({ message: "Reservation annulée avec succès"});
   } catch (error){
     console.error(error);
     res.status(500).json({ error: error.message });
